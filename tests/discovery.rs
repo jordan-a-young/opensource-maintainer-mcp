@@ -3,6 +3,7 @@ use opensource_maintainer_mcp::{
 };
 use serde_json::{Value, json};
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{header, method, path, query_param},
@@ -171,16 +172,23 @@ async fn handles_timeout_and_connection_failure() {
         client.repositories("owner").await,
         Err(Error::Timeout)
     ));
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("port");
+    // A closed port can hit the request timeout before Windows reports refusal.
+    // Accept and read the request, then close without an HTTP response instead.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("port");
     let addr = listener.local_addr().expect("address");
-    drop(listener);
+    let connection = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.expect("connection");
+        let mut request = [0; 1024];
+        assert!(socket.read(&mut request).await.expect("request") > 0);
+    });
     let client =
-        GithubClient::with_endpoint(&format!("http://{addr}/"), None, Duration::from_secs(1))
+        GithubClient::with_endpoint(&format!("http://{addr}/"), None, Duration::from_secs(5))
             .expect("client");
-    assert!(matches!(
-        client.repositories("owner").await,
-        Err(Error::Network)
-    ));
+    let result = client.repositories("owner").await;
+    connection.await.expect("server task");
+    assert!(matches!(result, Err(Error::Network)));
 }
 
 #[tokio::test]
