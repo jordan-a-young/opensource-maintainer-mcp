@@ -44,7 +44,24 @@ other architectures are unsupported. The launcher reports missing or mismatched 
 packages instead of silently downloading or compiling a fallback. Do not install with
 `--omit=optional`; reinstall with `--include=optional` if the native package is missing.
 
-Tools: `list_projects`, `get_project_overview`, `audit_repository`, `compare_standards`,
-`analyze_ci`, and `review_release_config`. See the
-[repository README](https://github.com/jordan-a-young/opensource-maintainer-mcp#readme)
-for scope and tool documentation. MIT licensed.
+Start with `list_projects`, then use a returned simple repository name (not a URL or
+`owner/name`). The configured owner/topic and archive policy apply to every tool.
+
+| Tool | Arguments | Purpose |
+| --- | --- | --- |
+| `list_projects` | `{}` | Discover matching public projects. |
+| `get_project_overview` | `{"repository":"element"}` | Summarize metadata and root npm/Cargo setup. |
+| `audit_repository` | `{"repository":"element"}` | Report observed maintenance gaps with evidence. |
+| `compare_standards` | `{"repositories":["element","availity-react"]}` | Compare conventions and declarations across 2–5 projects. |
+| `analyze_ci` | `{"repository":"element"}` | Statically inspect GitHub Actions workflows. |
+| `review_release_config` | `{"repository":"element"}` | Review npm metadata and release/OIDC workflow indicators. |
+
+Replace the example names with your discovery results. Ask your MCP assistant to list
+projects, then summarize or review a selected project. The server never modifies
+repositories, runs project scripts, or publishes packages. Findings are bounded static
+observations; unknown results and account-side trusted publishing remain unverified.
+
+See the [repository README](https://github.com/jordan-a-young/opensource-maintainer-mcp#readme)
+for detailed tool outputs, limits, and troubleshooting. Contributor instructions live in
+[AGENTS.md](https://github.com/jordan-a-young/opensource-maintainer-mcp/blob/main/AGENTS.md).
+MIT licensed.
