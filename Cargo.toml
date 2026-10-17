@@ -3,7 +3,12 @@ name = "opensource-maintainer-mcp"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "Read-only MCP discovery of public GitHub repositories"
+description = "Read-only MCP server for discovering and analyzing public GitHub repositories"
+repository = "https://github.com/jordan-a-young/opensource-maintainer-mcp"
+readme = "README.md"
+keywords = ["mcp", "github", "maintenance", "automation"]
+categories = ["command-line-utilities", "development-tools"]
+include = ["src/**", "tests/**", "examples/**", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "docs/**"]
 
 [dependencies]
 serde-saphyr = { version = "2.0", default-features = false, features = ["deserialize"] }

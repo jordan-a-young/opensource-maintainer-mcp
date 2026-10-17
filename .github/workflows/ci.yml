@@ -3,18 +3,26 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 permissions:
   contents: read
 jobs:
   rust:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install stable toolchain
         run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
-      - name: Tests
-        run: cargo test --locked --all-features
+      - name: Release tooling tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - name: Verify Cargo package without uploading
+        run: cargo publish --dry-run --locked
+  builds:
+    uses: ./.github/workflows/build-artifacts.yml
