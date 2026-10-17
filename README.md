@@ -103,6 +103,9 @@ See [the npm README](npm/README.md) for the planned MCP client configuration.
 
 ## MCP client configuration
 
+For step-by-step OpenCode, Pi, Codex, and Kiro setup, see the
+[client guide](docs/CLIENTS.md), including Windows/WSL and connection verification.
+
 Build the executable, then adapt these absolute paths to your checkout:
 
 ```json

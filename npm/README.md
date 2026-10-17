@@ -65,3 +65,7 @@ See the [repository README](https://github.com/jordan-a-young/opensource-maintai
 for detailed tool outputs, limits, and troubleshooting. Contributor instructions live in
 [AGENTS.md](https://github.com/jordan-a-young/opensource-maintainer-mcp/blob/main/AGENTS.md).
 MIT licensed.
+
+For OpenCode, Pi, Codex, and Kiro configuration, see the
+[client guide](https://github.com/jordan-a-young/opensource-maintainer-mcp/blob/main/docs/CLIENTS.md).
+It uses source builds until npm publication.
