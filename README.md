@@ -1,9 +1,25 @@
 # Open Source Maintainer MCP
 
-A Rust MCP server that discovers **public** GitHub repositories by owner and topic.
-Milestones 1–6 provide read-only `list_projects`, `get_project_overview`,
-`audit_repository`, `compare_standards`, `analyze_ci`, and `review_release_config` tools over stdio. Owners can be
-GitHub users or organizations; Availity is only the example configuration.
+A read-only [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server
+that helps maintainers inspect public GitHub projects from an MCP-compatible assistant.
+Configure a GitHub user or organization and a topic, then ask the assistant to discover
+projects, summarize their setup, compare conventions, and review CI and release settings.
+Availity is the example configuration; any supported owner/topic can be used.
+
+Use it to orient yourself in an unfamiliar project or identify maintenance work across
+related repositories. Its six tools return structured observations and evidence from
+bounded static inspection. They do not modify repositories, run project scripts, publish
+packages, inspect private repositories, or certify security or release readiness.
+
+The server runs locally as a stdio process launched by your MCP client and reads the
+public GitHub API over HTTPS. It requires no database or hosted service. Source builds
+are usable now; npm packages and downloadable releases are prepared for future publication.
+
+- [Setup and run](#setup-and-run) and [MCP client configuration](#mcp-client-configuration)
+- [Available tools](#available-tools) and [example requests](#example-requests)
+- [Troubleshooting](#troubleshooting)
+- [Contributor guidance](AGENTS.md) and [tests and checks](#tests-and-checks)
+- [Release maintenance](docs/RELEASING.md) and [npm publishing setup](docs/NPM.md)
 
 ## Setup and run
 
@@ -11,10 +27,15 @@ Install stable Rust with [rustup](https://rustup.rs/) if it is not already insta
 Git is needed for development; GitHub CLI is optional for repository contribution.
 
 ```sh
+git clone https://github.com/jordan-a-young/opensource-maintainer-mcp.git
+cd opensource-maintainer-mcp
 cargo build --locked
 cp examples/config.toml config.toml
-cargo run --locked -- config.toml
 ```
+
+Edit `config.toml` to select your owner and topic, then configure your MCP client below.
+In PowerShell, use `Copy-Item examples/config.toml config.toml` for the copy step.
+To start the process directly for diagnosis, run `cargo run --locked -- config.toml`.
 
 The server waits for MCP JSON-RPC messages on stdin; it is not an interactive CLI.
 Stdout contains only protocol messages. Diagnostics go to stderr. Set `RUST_LOG=debug`
@@ -95,6 +116,54 @@ Build the executable, then adapt these absolute paths to your checkout:
 }
 ```
 
+This is a common client configuration shape; your client's settings location and schema
+may differ. On Windows, use the `.exe` binary and escape backslashes in JSON paths (or
+use forward slashes). For a release build, replace `target/debug` with `target/release`.
+Restart or reconnect the client after saving its configuration. It launches the process
+itself; you do not need to leave a separate `cargo run` process running.
+
+Verify that the client lists all six tools, then ask it to run `list_projects`. Supply
+`GITHUB_TOKEN`, if needed, through the client's environment or secret settings; a desktop
+client may not inherit variables from your terminal.
+
+## Available tools
+
+Start with `list_projects` and use the returned simple `name` in subsequent calls.
+All selections must match the configured owner, topic, and archived-repository policy.
+Arguments below are MCP tool arguments, not shell commands.
+
+| Tool | Arguments | Use it to |
+| --- | --- | --- |
+| [`list_projects`](#project-discovery) | `{}` | Find public projects in the configured scope. |
+| [`get_project_overview`](#project-overview) | `{"repository":"element"}` | Summarize metadata, root npm/Cargo manifests, scripts, and configuration filenames. |
+| [`audit_repository`](#repository-audit) | `{"repository":"element"}` | Identify observed documentation and root manifest gaps with evidence and recommendations. |
+| [`compare_standards`](#standards-comparison) | `{"repositories":["element","availity-react"]}` | Compare conventions and literal dependency declarations across 2–5 distinct projects. |
+| [`analyze_ci`](#github-actions-analysis) | `{"repository":"element"}` | Inspect GitHub Actions workflow triggers, permissions, timeouts, and action references. |
+| [`review_release_config`](#release-configuration-review) | `{"repository":"element"}` | Review visible npm publication metadata and workflow release/OIDC indicators. |
+
+Replace example names with discovered projects. Repository URLs and `owner/name` are
+not accepted. Reports distinguish observed findings from unknown or inapplicable data;
+read each tool's scope and statuses before treating an observation as a maintenance task.
+
+### Example requests
+
+Once connected, ask your assistant:
+
+- “List the projects available through the maintainer server.”
+- “Summarize the setup of element and audit its root maintenance conventions.”
+- “Compare element and availity-react, distinguishing differences from unknown values.”
+- “Analyze element's CI and review its release configuration. Show evidence and limitations.”
+
+These examples assume those projects appear in your configured discovery results.
+The client handles MCP initialization and tool calls. For SDK clients, an example
+`tools/call` parameters object is:
+
+```json
+{"name":"get_project_overview","arguments":{"repository":"element"}}
+```
+
+### Project discovery
+
 The client can call `tools/list`, then `tools/call` with
 `{"name":"list_projects","arguments":{}}`. The tool advertises an output schema and
 returns `structuredContent` with this shape:
@@ -114,6 +183,7 @@ returns `structuredContent` with this shape:
 ```
 
 Description and language may be null. An empty match returns `{"projects":[]}`.
+
 ### Project overview
 
 Call `get_project_overview` with `{"repository":"element"}`. Use the simple repository
@@ -312,6 +382,46 @@ GitHub failures return MCP tool results with `isError: true` and actionable text
 Authentication, rate limits, HTTP failures, malformed JSON, timeouts, and connection
 failures are distinguished. Raw upstream bodies and credentials are not exposed.
 
+### Release configuration review
+
+`review_release_config({"repository":"element"})` uses the same public owner/topic scope
+as the other tools. It reports root `package.json` name/version presence, private/workspace
+flags, recognized publication access/provenance declarations, release script **names**,
+known release-tool dependencies, and root release configuration filenames. Configuration
+bodies, script bodies, environment values, and raw registry URLs are not returned.
+Registry settings are classified as `not_declared`, `npm_https`, `other_https`,
+`insecure_or_credentialed`, `unrecognized`, or `not_assessed`.
+
+A private workspace root does not require root publication metadata; workspace members
+are not inspected. Name/version checks observe nonempty strings, not npm-name or SemVer
+validity. Recognized GitHub repository coordinates are compared with the selected project.
+Malformed fields remain unknown. Findings describe observed declarations, not publishability.
+
+Workflow observations identify direct npm/pnpm publish commands, yarn npm publish,
+npm/pnpm release-script invocations, selected npx release tools, Changesets/release-please
+actions, and untraversed reusable workflow calls. This is conservative text inspection:
+indirection, shell control flow, expressions, matrices, action internals, and actual execution
+are not resolved. Each workflow retains its analysis/skip status. Jobs expose evidence
+locations, effective OIDC permission observations, and token-named environment-key presence.
+A job permission block overrides workflow permissions; unspecified inherited defaults remain
+unknown. Missing OIDC grants are not treated as defects in token-based/non-publishing jobs.
+
+`id-token: write` is only a prerequisite for npm trusted publishing. npm account settings,
+runner/CLI eligibility, actual authentication, registry state, and successful publication
+always remain unverified. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
+and [package metadata](https://docs.npmjs.com/cli/v10/configuring-npm/package-json/).
+
+Collection reuses one root snapshot, reads regular root manifests up to 256 KiB, and
+inherits the CI workflow/YAML budgets. All content requests are anonymous and pinned to
+Git tree/blob identifiers. Symlinks and called workflows/actions are never followed.
+Malformed manifests produce `not_assessed`; HTTP/integrity failures remain errors.
+
+Manual live smoke check (never part of CI):
+
+```sh
+cargo run --locked --example smoke -- target/debug/opensource-maintainer-mcp examples/config.toml element release
+```
+
 ## Discovery behavior
 
 The server uses `GET /users/{owner}/repos`, a public-repository listing endpoint that
@@ -329,6 +439,23 @@ Requests have a 10-second connect timeout and 30-second overall timeout per page
 Redirects are disabled. Rate-limit errors include numeric retry-after/reset hints when
 available; the server does not retry automatically or block a client while waiting for
 quota. A generic 403 without rate-limit headers is reported as HTTP 403.
+
+## Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| Process waits without a prompt | Normal for stdio MCP. Connect an MCP client; stdout is reserved for protocol messages. |
+| Client cannot start the server | Build the executable, check absolute binary/config paths, and use `.exe` on Windows. Read the client's server stderr log. |
+| Configuration fails at startup | Use `[github]` with `owner`, lowercase `topic`, and optional boolean `include_archived`; unknown keys are rejected. |
+| `list_projects` returns an empty array | Confirm the owner and exact topic on GitHub. Repositories must be public; archived ones require `include_archived = true`. |
+| Repository selection is rejected | Call `list_projects` again and pass a returned simple `name`, not a URL or `owner/name`. Comparisons need 2–5 distinct names. |
+| GitHub rate-limit error | Follow the retry/reset hint when provided. An optional token helps discovery, but content reads intentionally remain anonymous and use that quota. There are no automatic retries. |
+| A report says `not_assessed` or skips a file | Consult its evidence and scope: unreadable, unsupported, or oversized input is not proof that a practice is missing. |
+| npm cannot find the package | npm distribution is not published yet. Use the source build until the first approved release. |
+
+For more diagnostics, set `RUST_LOG=debug` in the server's environment and inspect stderr.
+Keep repository descriptions and script strings as untrusted data; do not execute them
+merely because they appear in a tool response.
 
 ## Tests and checks
 
@@ -410,46 +537,6 @@ Optional interactive inspection (requires Node/npm; not required by this project
 
 ```sh
 npx @modelcontextprotocol/inspector target/debug/opensource-maintainer-mcp examples/config.toml
-```
-
-## Release configuration review
-
-`review_release_config({"repository":"element"})` uses the same public owner/topic scope
-as the other tools. It reports root `package.json` name/version presence, private/workspace
-flags, recognized publication access/provenance declarations, release script **names**,
-known release-tool dependencies, and root release configuration filenames. Configuration
-bodies, script bodies, environment values, and raw registry URLs are not returned.
-Registry settings are classified as `not_declared`, `npm_https`, `other_https`,
-`insecure_or_credentialed`, `unrecognized`, or `not_assessed`.
-
-A private workspace root does not require root publication metadata; workspace members
-are not inspected. Name/version checks observe nonempty strings, not npm-name or SemVer
-validity. Recognized GitHub repository coordinates are compared with the selected project.
-Malformed fields remain unknown. Findings describe observed declarations, not publishability.
-
-Workflow observations identify direct npm/pnpm publish commands, yarn npm publish,
-npm/pnpm release-script invocations, selected npx release tools, Changesets/release-please
-actions, and untraversed reusable workflow calls. This is conservative text inspection:
-indirection, shell control flow, expressions, matrices, action internals, and actual execution
-are not resolved. Each workflow retains its analysis/skip status. Jobs expose evidence
-locations, effective OIDC permission observations, and token-named environment-key presence.
-A job permission block overrides workflow permissions; unspecified inherited defaults remain
-unknown. Missing OIDC grants are not treated as defects in token-based/non-publishing jobs.
-
-`id-token: write` is only a prerequisite for npm trusted publishing. npm account settings,
-runner/CLI eligibility, actual authentication, registry state, and successful publication
-always remain unverified. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
-and [package metadata](https://docs.npmjs.com/cli/v10/configuring-npm/package-json/).
-
-Collection reuses one root snapshot, reads regular root manifests up to 256 KiB, and
-inherits the CI workflow/YAML budgets. All content requests are anonymous and pinned to
-Git tree/blob identifiers. Symlinks and called workflows/actions are never followed.
-Malformed manifests produce `not_assessed`; HTTP/integrity failures remain errors.
-
-Manual live smoke check (never part of CI):
-
-```sh
-cargo run --locked --example smoke -- target/debug/opensource-maintainer-mcp examples/config.toml element release
 ```
 
 ## Layout and Rust learning guide
