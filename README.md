@@ -65,6 +65,21 @@ Apple Silicon. Binaries are not code-signed/notarized; checksums provide integri
 See the [release guide](docs/RELEASING.md) for the draft-first flow, platform limits,
 validation, and the separate future crates.io decision.
 
+## npm installation (prepared, not published yet)
+
+npm is the intended primary installation route; crates.io is optional. After the first
+approved npm release, users will be able to run:
+
+```sh
+npx --yes @jys/opensource-maintainer-mcp@0.1.0 /absolute/path/config.toml
+```
+
+The launcher needs Node 22.14+ and selects the appropriate prebuilt Rust package. No Rust
+installation, postinstall script, or GitHub binary download is needed. The packages are
+not available on npm yet. See [npm setup and release gates](docs/NPM.md) for the account
+checklist, first-package bootstrap limitation, platform support, and trusted staging flow.
+See [the npm README](npm/README.md) for the planned MCP client configuration.
+
 ## MCP client configuration
 
 Build the executable, then adapt these absolute paths to your checkout:

@@ -49,3 +49,9 @@ Release infrastructure is separate from the read-only MCP server. Keep publicati
 version tags may prepare drafts, but workflows must not publish a release or upload to
 crates.io without explicit approval. Share artifact builds between CI and release workflows,
 pin external actions, and validate the archive layout and checksums when changing packaging.
+
+For npm distribution, keep the source manifest private and generate publishable copies
+under ignored npm-dist/. No postinstall downloads or install-time compilation. Reserve
+launcher stdout for MCP and pin native dependencies to the exact version. Never upload,
+stage (which can publish placeholders), bootstrap packages, or enable the staging gate
+without explicit approval. Trusted publishing account setup is separate from dry-run tests.
