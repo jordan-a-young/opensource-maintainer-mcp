@@ -115,8 +115,9 @@ fn evaluate(inspection: Inspection) -> RepositoryAudit {
     }
 
     let npm = overview.manifests.iter().find(|m| m.path == "package.json");
-    checks.push(script_check(npm, "test"));
-    checks.push(script_check(npm, "lint"));
+    let pnpm_workspace = root_files.iter().any(|file| file == "pnpm-workspace.yaml");
+    checks.push(script_check(npm, "test", pnpm_workspace));
+    checks.push(script_check(npm, "lint", pnpm_workspace));
     let lockfiles: Vec<String> = [
         "package-lock.json",
         "npm-shrinkwrap.json",
@@ -170,7 +171,11 @@ fn lock_manager(file: &str) -> &'static str {
     }
 }
 
-fn script_check(manifest: Option<&ManifestSummary>, kind: &str) -> AuditCheck {
+fn script_check(
+    manifest: Option<&ManifestSummary>,
+    kind: &str,
+    pnpm_workspace: bool,
+) -> AuditCheck {
     let id = format!("npm.{kind}_script");
     let Some(manifest) = manifest else {
         return check(
@@ -212,12 +217,16 @@ fn script_check(manifest: Option<&ManifestSummary>, kind: &str) -> AuditCheck {
             evidence,
             None,
         )
-    } else if manifest.workspace {
+    } else if manifest.workspace || pnpm_workspace {
+        let mut evidence = vec!["package.json".into()];
+        if pnpm_workspace {
+            evidence.push("pnpm-workspace.yaml".into());
+        }
         check(
             &id,
             CheckStatus::NotAssessed,
-            "No conventional root script entry was found; workspace members may define their own tooling.",
-            vec!["package.json".into()],
+            "No conventional root script entry was found; workspace declarations or a pnpm workspace filename indicate that members may define their own tooling. Workspace configuration contents were not inspected.",
+            evidence,
             Some("Inspect workspace member scripts or document the root orchestration command."),
         )
     } else {
@@ -320,6 +329,32 @@ mod tests {
         assert_eq!(
             result(&report, "npm.lint_script").status,
             CheckStatus::NotAssessed
+        );
+    }
+    #[test]
+    fn pnpm_workspace_filename_preserves_script_uncertainty() {
+        let report = audit(&["pnpm-workspace.yaml"], Some(npm()));
+        for id in ["npm.test_script", "npm.lint_script"] {
+            let check = result(&report, id);
+            assert_eq!(check.status, CheckStatus::NotAssessed);
+            assert_eq!(check.evidence, ["package.json", "pnpm-workspace.yaml"]);
+        }
+        let mut manifest = npm();
+        manifest.scripts.insert("test".into(), "vitest".into());
+        let report = audit(&["pnpm-workspace.yaml"], Some(manifest));
+        assert_eq!(
+            result(&report, "npm.test_script").status,
+            CheckStatus::Passed
+        );
+        let report = audit(&["pnpm-lock.yaml"], Some(npm()));
+        assert_eq!(
+            result(&report, "npm.test_script").status,
+            CheckStatus::Finding
+        );
+        let report = audit(&["pnpm-workspace.yaml"], None);
+        assert_eq!(
+            result(&report, "npm.test_script").status,
+            CheckStatus::NotApplicable
         );
     }
     #[test]

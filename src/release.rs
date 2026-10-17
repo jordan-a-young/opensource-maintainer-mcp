@@ -217,7 +217,7 @@ fn review_package(bytes: &[u8], full_name: &str) -> (ReleasePackage, Vec<AuditCh
     ] {
         let status = if package.private == Some(true) {
             CheckStatus::NotApplicable
-        } else if private_unknown {
+        } else if private_unknown || doc.get(field).is_some_and(|value| !value.is_string()) {
             CheckStatus::NotAssessed
         } else if value.is_some_and(|s| !s.trim().is_empty()) {
             CheckStatus::Passed
@@ -340,9 +340,24 @@ fn command_indicator(command: &str) -> bool {
     command.lines().any(|line| {
         let words: Vec<_> = line.split_whitespace().collect();
         match words.as_slice() {
-            ["npm" | "pnpm", "publish", ..] | ["yarn", "npm", "publish", ..] => true,
-            ["npm" | "pnpm", "run", script, ..] => release_script(script),
+            ["npm" | "pnpm" | "yarn", "publish", ..] | ["yarn", "npm", "publish", ..] => true,
+            ["npm", "run" | "run-script", script, ..] | ["pnpm" | "yarn", "run", script, ..] => {
+                release_script(script)
+            }
             ["npx", "semantic-release" | "release-it" | "changeset", ..] => true,
+            [
+                "pnpm",
+                "exec" | "dlx",
+                "semantic-release" | "release-it" | "changeset",
+                ..,
+            ]
+            | [
+                "yarn",
+                "dlx",
+                "semantic-release" | "release-it" | "changeset",
+                ..,
+            ] => true,
+            ["pnpm" | "yarn", script, ..] => release_script(script),
             _ => false,
         }
     })
@@ -467,6 +482,45 @@ mod tests {
         );
     }
     #[test]
+    fn publication_fields_distinguish_unsupported_absent_and_empty_values() {
+        for field in ["name", "version"] {
+            for value in [json!(42), json!({}), json!([]), json!(false), Value::Null] {
+                let mut doc = json!({"name":"demo", "version":"1.0.0"});
+                doc[field] = value;
+                let bytes = serde_json::to_vec(&doc).expect("fixture");
+                let (_, checks) = review_package(&bytes, "owner/demo");
+                assert_eq!(
+                    status(&checks, &format!("package.{field}")),
+                    &CheckStatus::NotAssessed
+                );
+                doc["private"] = json!(true);
+                let (_, checks) =
+                    review_package(&serde_json::to_vec(&doc).expect("fixture"), "owner/demo");
+                assert_eq!(
+                    status(&checks, &format!("package.{field}")),
+                    &CheckStatus::NotApplicable
+                );
+            }
+            for value in ["", "   "] {
+                let mut doc = json!({"name":"demo", "version":"1.0.0"});
+                doc[field] = json!(value);
+                let (_, checks) =
+                    review_package(&serde_json::to_vec(&doc).expect("fixture"), "owner/demo");
+                assert_eq!(
+                    status(&checks, &format!("package.{field}")),
+                    &CheckStatus::Finding
+                );
+            }
+        }
+        let (_, checks) = review_package(b"{}", "owner/demo");
+        for field in ["name", "version"] {
+            assert_eq!(
+                status(&checks, &format!("package.{field}")),
+                &CheckStatus::Finding
+            );
+        }
+    }
+    #[test]
     fn projects_metadata_without_script_bodies_or_registry_credentials() {
         let doc = json!({"name":"@owner/demo","version":"1.0.0","repository":{"url":"git+https://github.com/owner/demo.git"},"scripts":{"release":"SECRET_COMMAND","test":"test"},"devDependencies":{"semantic-release":"*"},"publishConfig":{"access":"public","provenance":true,"registry":"https://user:SECRET_PASSWORD@registry.npmjs.org"}});
         let (package, checks) = review_package(
@@ -544,16 +598,63 @@ mod tests {
             "pnpm run release:next",
             "yarn npm publish",
             "npx semantic-release",
+            "yarn publish --tag next",
+            "yarn run release:next",
+            "yarn release",
+            "pnpm release:next",
+            "npm run-script release",
+            "pnpm exec semantic-release",
+            "pnpm dlx release-it",
+            "yarn dlx changeset publish",
         ] {
-            assert!(command_indicator(command));
+            assert!(command_indicator(command), "{command}");
         }
         for command in [
             "# npm publish",
             "echo npm publish",
             "npm test",
             "./release.sh",
+            "yarn install",
+            "pnpm install",
+            "yarn run test",
+            "pnpm exec vitest",
+            "yarn dlx create-vite",
+            "pnpm dlx create-vite",
+            "npm release",
+            "echo yarn publish",
+            "# pnpm release",
+            "pnpm release-notes",
+            "yarn run prerelease-check",
         ] {
-            assert!(!command_indicator(command));
+            assert!(!command_indicator(command), "{command}");
+        }
+    }
+
+    #[test]
+    fn package_manager_release_indicators_preserve_evidence_without_commands() {
+        for command in [
+            "yarn publish",
+            "yarn release",
+            "pnpm release",
+            "pnpm dlx release-it",
+        ] {
+            let jobs = workflow_release_jobs(
+                "release.yml",
+                &json!({"jobs":{"publish":{
+                    "steps":[{"run":format!("{command} --tag SECRET_VALUE")}]
+                }}}),
+            );
+            assert_eq!(jobs.len(), 1, "{command}");
+            assert_eq!(jobs[0].indicators, ["direct_publish_or_release_command"]);
+            assert_eq!(
+                jobs[0].checks[0].evidence,
+                ["release.yml#/jobs/publish/steps/0/run"]
+            );
+            assert!(
+                !serde_json::to_string(&jobs)
+                    .expect("serialize")
+                    .contains("SECRET_VALUE")
+            );
         }
     }
 }
