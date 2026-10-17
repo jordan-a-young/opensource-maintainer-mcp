@@ -166,6 +166,15 @@ fn parse_manifest(path: &str, bytes: &[u8]) -> ManifestSummary {
     let mut result = empty_summary(path, ManifestStatus::Invalid);
     if path == "package.json" {
         if let Ok(npm) = serde_json::from_slice::<NpmManifest>(bytes) {
+            // The public workspace flag is boolean, so unsupported declarations
+            // use the existing invalid-manifest status to preserve uncertainty.
+            if npm
+                .workspaces
+                .as_ref()
+                .is_some_and(|value| !value.is_array() && !value.is_object())
+            {
+                return result;
+            }
             result.name = npm.name;
             result.version = npm.version;
             result.package_manager = npm.package_manager;
@@ -274,6 +283,21 @@ mod tests {
         assert_eq!(parsed.package_manager.as_deref(), Some("pnpm@10"));
         assert!(parsed.workspace);
         assert_eq!(parsed.scripts["prepare"], "do-not-execute");
+    }
+    #[test]
+    fn unsupported_workspace_shapes_remain_unknown() {
+        for value in ["false", "42", "\"packages/*\""] {
+            let source = format!(r#"{{"workspaces":{value},"scripts":{{"test":"test"}}}}"#);
+            let summary = parse_manifest("package.json", source.as_bytes());
+            assert!(matches!(summary.status, ManifestStatus::Invalid));
+            assert!(!summary.workspace);
+        }
+        for value in [r#"["packages/*"]"#, r#"{"packages":["packages/*"]}"#] {
+            let source = format!(r#"{{"workspaces":{value}}}"#);
+            let summary = parse_manifest("package.json", source.as_bytes());
+            assert!(matches!(summary.status, ManifestStatus::Parsed));
+            assert!(summary.workspace);
+        }
     }
     #[test]
     fn handles_cargo_workspace_and_inherited_version() {

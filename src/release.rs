@@ -217,7 +217,7 @@ fn review_package(bytes: &[u8], full_name: &str) -> (ReleasePackage, Vec<AuditCh
     ] {
         let status = if package.private == Some(true) {
             CheckStatus::NotApplicable
-        } else if private_unknown {
+        } else if private_unknown || doc.get(field).is_some_and(|value| !value.is_string()) {
             CheckStatus::NotAssessed
         } else if value.is_some_and(|s| !s.trim().is_empty()) {
             CheckStatus::Passed
@@ -465,6 +465,45 @@ mod tests {
             status(&checks, "package.version"),
             &CheckStatus::NotAssessed
         );
+    }
+    #[test]
+    fn publication_fields_distinguish_unsupported_absent_and_empty_values() {
+        for field in ["name", "version"] {
+            for value in [json!(42), json!({}), json!([]), json!(false), Value::Null] {
+                let mut doc = json!({"name":"demo", "version":"1.0.0"});
+                doc[field] = value;
+                let bytes = serde_json::to_vec(&doc).expect("fixture");
+                let (_, checks) = review_package(&bytes, "owner/demo");
+                assert_eq!(
+                    status(&checks, &format!("package.{field}")),
+                    &CheckStatus::NotAssessed
+                );
+                doc["private"] = json!(true);
+                let (_, checks) =
+                    review_package(&serde_json::to_vec(&doc).expect("fixture"), "owner/demo");
+                assert_eq!(
+                    status(&checks, &format!("package.{field}")),
+                    &CheckStatus::NotApplicable
+                );
+            }
+            for value in ["", "   "] {
+                let mut doc = json!({"name":"demo", "version":"1.0.0"});
+                doc[field] = json!(value);
+                let (_, checks) =
+                    review_package(&serde_json::to_vec(&doc).expect("fixture"), "owner/demo");
+                assert_eq!(
+                    status(&checks, &format!("package.{field}")),
+                    &CheckStatus::Finding
+                );
+            }
+        }
+        let (_, checks) = review_package(b"{}", "owner/demo");
+        for field in ["name", "version"] {
+            assert_eq!(
+                status(&checks, &format!("package.{field}")),
+                &CheckStatus::Finding
+            );
+        }
     }
     #[test]
     fn projects_metadata_without_script_bodies_or_registry_credentials() {

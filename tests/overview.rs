@@ -76,6 +76,42 @@ async fn fixture(mock: &MockServer) {
 }
 
 #[tokio::test]
+async fn malformed_workspace_declarations_do_not_infer_member_tooling() {
+    use opensource_maintainer_mcp::model::CheckStatus;
+
+    for value in [json!(false), json!(42), json!("packages/*")] {
+        let mock = MockServer::start().await;
+        let content = serde_json::to_vec(&json!({"workspaces":value})).expect("fixture");
+        listing(&mock, json!([repository()])).await;
+        tree(
+            &mock,
+            vec![entry("package.json", "npm-sha", content.len())],
+            false,
+        )
+        .await;
+        blob(&mock, "npm-sha", &content).await;
+
+        let report = service(&mock)
+            .audit_repository("demo")
+            .await
+            .expect("audit");
+        for (id, expected) in [
+            ("manifest.package.json", CheckStatus::Finding),
+            ("npm.test_script", CheckStatus::NotAssessed),
+            ("npm.lint_script", CheckStatus::NotAssessed),
+        ] {
+            let check = report
+                .checks
+                .iter()
+                .find(|check| check.id == id)
+                .expect("check");
+            assert_eq!(check.status, expected);
+            assert!(!check.summary.contains("workspace members"));
+        }
+    }
+}
+
+#[tokio::test]
 async fn reads_snapshot_manifests_and_lists_configs_without_reading_them() {
     let mock = MockServer::start().await;
     fixture(&mock).await;
