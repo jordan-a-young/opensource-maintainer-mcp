@@ -1,5 +1,21 @@
 # Contributor guidance
 
+## Scope and development entry points
+
+This is a read-only stdio MCP server for bounded static inspection of public GitHub
+repositories. Read `README.md` for setup, tool contracts, supported platforms, and
+test/check commands. Use stable Rust and the committed `Cargo.lock`; source builds
+use `cargo build --locked`. The `config.toml` workflow and sanitized example are
+documented in `README.md` and `examples/config.toml`. Do not install toolchains or
+change dependencies merely to run a check without approval.
+
+Read `docs/RELEASING.md` and `docs/NPM.md` before release or distribution work.
+The architecture, verification, security, and approval constraints below apply
+alongside that documentation. Preserve existing tool contracts and stable rule IDs;
+keep unknown/inapplicable states distinct from observed findings.
+
+## Architecture and verification
+
 Implement one milestone per pull request. Milestones 1–6 expose `list_projects`,
 `get_project_overview`, `audit_repository`, `compare_standards`, `analyze_ci`, and `review_release_config`.
 Do not implement roadmap tools without explicit approval. Never merge without approval.
