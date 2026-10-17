@@ -3,7 +3,7 @@ use opensource_maintainer_mcp::{
 };
 use serde_json::{Value, json};
 use std::time::Duration;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{header, method, path, query_param},
@@ -189,6 +189,43 @@ async fn handles_timeout_and_connection_failure() {
     let result = client.repositories("owner").await;
     connection.await.expect("server task");
     assert!(matches!(result, Err(Error::Network)));
+}
+
+#[tokio::test]
+async fn distinguishes_interrupted_and_timed_out_response_bodies() {
+    for stall in [false, true] {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("port");
+        let addr = listener.local_addr().expect("address");
+        let (finished, wait) = tokio::sync::oneshot::channel::<()>();
+        let connection = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("connection");
+            let mut request = Vec::new();
+            while !request.ends_with(b"\r\n\r\n") {
+                request.push(socket.read_u8().await.expect("request headers"));
+            }
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1000\r\nConnection: close\r\n\r\n[")
+                .await
+                .expect("partial response");
+            if stall {
+                let _ = wait.await;
+            }
+            socket.shutdown().await.expect("close response");
+        });
+        let client =
+            GithubClient::with_endpoint(&format!("http://{addr}/"), None, Duration::from_secs(1))
+                .expect("client");
+        let result = client.repositories("owner").await;
+        let _ = finished.send(());
+        connection.await.expect("server task");
+        if stall {
+            assert!(matches!(result, Err(Error::Timeout)), "{result:?}");
+        } else {
+            assert!(matches!(result, Err(Error::Network)), "{result:?}");
+        }
+    }
 }
 
 #[tokio::test]
