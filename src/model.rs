@@ -228,3 +228,47 @@ pub struct CiJob {
     pub reusable_workflow: bool,
     pub step_count: usize,
 }
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ReleaseReview {
+    pub project: Project,
+    pub tree_sha: String,
+    pub scope: String,
+    pub package: ReleasePackage,
+    pub configuration_files: Vec<String>,
+    pub workflows: Vec<ReleaseWorkflow>,
+    pub release_jobs: Vec<ReleaseJob>,
+    pub checks: Vec<AuditCheck>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ReleasePackage {
+    pub status: ObservationStatus,
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub private: Option<bool>,
+    pub workspace: bool,
+    pub publish_access: Option<String>,
+    /// Classification only; raw registry URLs may contain credentials.
+    pub registry: String,
+    pub provenance: Option<bool>,
+    pub script_names: Vec<String>,
+    pub tooling: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ReleaseWorkflow {
+    pub path: String,
+    pub status: WorkflowStatus,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ReleaseJob {
+    pub workflow: String,
+    pub job: String,
+    /// Static indicator labels, never command bodies.
+    pub indicators: Vec<String>,
+    pub oidc_permission: ObservationStatus,
+    pub token_environment_present: bool,
+    pub checks: Vec<AuditCheck>,
+}

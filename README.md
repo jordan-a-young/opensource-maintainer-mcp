@@ -1,8 +1,8 @@
 # Open Source Maintainer MCP
 
 A Rust MCP server that discovers **public** GitHub repositories by owner and topic.
-Milestones 1–5 provide read-only `list_projects`, `get_project_overview`, and
-`audit_repository`, `compare_standards`, and `analyze_ci` tools over stdio. Owners can be
+Milestones 1–6 provide read-only `list_projects`, `get_project_overview`,
+`audit_repository`, `compare_standards`, `analyze_ci`, and `review_release_config` tools over stdio. Owners can be
 GitHub users or organizations; Availity is only the example configuration.
 
 ## Setup and run
@@ -368,6 +368,46 @@ Optional interactive inspection (requires Node/npm; not required by this project
 npx @modelcontextprotocol/inspector target/debug/opensource-maintainer-mcp examples/config.toml
 ```
 
+## Release configuration review
+
+`review_release_config({"repository":"element"})` uses the same public owner/topic scope
+as the other tools. It reports root `package.json` name/version presence, private/workspace
+flags, recognized publication access/provenance declarations, release script **names**,
+known release-tool dependencies, and root release configuration filenames. Configuration
+bodies, script bodies, environment values, and raw registry URLs are not returned.
+Registry settings are classified as `not_declared`, `npm_https`, `other_https`,
+`insecure_or_credentialed`, `unrecognized`, or `not_assessed`.
+
+A private workspace root does not require root publication metadata; workspace members
+are not inspected. Name/version checks observe nonempty strings, not npm-name or SemVer
+validity. Recognized GitHub repository coordinates are compared with the selected project.
+Malformed fields remain unknown. Findings describe observed declarations, not publishability.
+
+Workflow observations identify direct npm/pnpm publish commands, yarn npm publish,
+npm/pnpm release-script invocations, selected npx release tools, Changesets/release-please
+actions, and untraversed reusable workflow calls. This is conservative text inspection:
+indirection, shell control flow, expressions, matrices, action internals, and actual execution
+are not resolved. Each workflow retains its analysis/skip status. Jobs expose evidence
+locations, effective OIDC permission observations, and token-named environment-key presence.
+A job permission block overrides workflow permissions; unspecified inherited defaults remain
+unknown. Missing OIDC grants are not treated as defects in token-based/non-publishing jobs.
+
+`id-token: write` is only a prerequisite for npm trusted publishing. npm account settings,
+runner/CLI eligibility, actual authentication, registry state, and successful publication
+always remain unverified. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
+and [package metadata](https://docs.npmjs.com/cli/v10/configuring-npm/package-json/).
+
+Collection reuses one root snapshot, reads regular root manifests up to 256 KiB, and
+inherits the CI workflow/YAML budgets. All content requests are anonymous and pinned to
+Git tree/blob identifiers. Symlinks and called workflows/actions are never followed.
+Malformed manifests produce `not_assessed`; HTTP/integrity failures remain errors.
+
+Manual live smoke check (never part of CI):
+
+```sh
+cargo run --locked --example smoke -- target/debug/opensource-maintainer-mcp examples/config.toml element release
+```
+
 ## Layout and Rust learning guide
 
 - `src/main.rs`: startup, environment, diagnostics, stdio lifecycle.
@@ -378,6 +418,7 @@ npx @modelcontextprotocol/inspector target/debug/opensource-maintainer-mcp examp
 - `src/audit.rs`: pure audit rules and the transport-independent audit service method.
 - `src/compare.rs`: dependency extraction and deterministic cross-project comparison.
 - `src/ci.rs`: bounded workflow discovery, YAML parsing, and static CI checks.
+- `src/release.rs`: root npm release metadata and pure workflow release observations.
 - `src/config.rs`: typed TOML parsing and validation.
 - `src/model.rs`: GitHub wire representation and stable tool output.
 - `src/error.rs`: application error enum with `thiserror`.
@@ -420,9 +461,18 @@ The YAML parser options use its builder macros because the public structs are
 `non_exhaustive`: downstream code must allow the library to add fields in future releases.
 Network collection and pure YAML analysis remain separate and independently testable.
 
+Milestone 6 moves the owned root tree into the shared workflow collector after borrowing
+it for package/config observations, avoiding a second discovery or root-tree request.
+Pure helpers borrow JSON values and return owned, deliberately limited summaries rather
+than exposing raw documents. `Option::or_else` preserves job permission overrides, and
+explicit statuses distinguish unavailable metadata from failed checks. HTTP failures use
+`Result` while malformed or skipped content has a report status. No new dependencies or
+trait abstractions are needed.
+
 ## Roadmap
 
-Future proposals only: release configuration review and eventual agent-factory integration. No
-repository writes, database, or plugin framework are included in Milestones 1–5.
+Future proposals only: eventual agent-factory integration. Repository CI and hardening remain
+a separate follow-up. No
+repository writes, database, or plugin framework are included in Milestones 1–6.
 
 MIT licensed.

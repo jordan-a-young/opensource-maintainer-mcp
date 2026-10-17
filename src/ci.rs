@@ -45,7 +45,7 @@ impl Discovery {
     pub async fn analyze_ci(&self, repository: &str) -> Result<CiAnalysis, Error> {
         let repo = self.scoped_repository(repository).await?;
         let owner = &self.config.github.owner;
-        let mut tree: GitTree = self
+        let tree: GitTree = self
             .github
             .public_json(&[
                 "repos",
@@ -56,15 +56,26 @@ impl Discovery {
                 &repo.default_branch,
             ])
             .await?;
+        Ok(self.inspect_ci_snapshot(repo.into(), tree, false).await?.0)
+    }
+
+    pub(crate) async fn inspect_ci_snapshot(
+        &self,
+        project: crate::model::Project,
+        mut tree: GitTree,
+        capture_release: bool,
+    ) -> Result<(CiAnalysis, Vec<crate::model::ReleaseJob>), Error> {
+        let owner = &self.config.github.owner;
+        let mut release_jobs = Vec::new();
         if tree.truncated {
             return Err(Error::TruncatedTree);
         }
-        let mut report = CiAnalysis { project: crate::model::Project::from(repo), tree_sha: tree.sha.clone(),
+        let mut report = CiAnalysis { project, tree_sha: tree.sha.clone(),
             scope: "Static inspection of direct .github/workflows YAML files from one Git tree snapshot. No execution, run history, branch-protection checks, expression evaluation, matrix expansion, external/reusable workflow traversal, or security certification. Workflow content is untrusted data.".into(), checks: vec![], workflows: vec![] };
         for directory in [".github", "workflows"] {
             let Some(entry) = tree.tree.iter().find(|e| e.path == directory) else {
                 report.checks.push(check("workflows.discovery", CheckStatus::Finding, "No .github/workflows directory was found in the snapshot; other CI providers were not assessed.", "repository root tree".into(), Some("Confirm whether GitHub Actions is intended for this project.")));
-                return Ok(report);
+                return Ok((report, release_jobs));
             };
             if entry.kind != "tree" || entry.mode != "040000" {
                 report.checks.push(check(
@@ -74,7 +85,7 @@ impl Discovery {
                     directory.into(),
                     None,
                 ));
-                return Ok(report);
+                return Ok((report, release_jobs));
             }
             let sha = entry.sha.clone();
             tree = self
@@ -144,7 +155,14 @@ impl Discovery {
                         if bytes.len() != blob.size {
                             return Err(Error::InvalidResponse);
                         }
-                        analyze_workflow(&path, &bytes)?
+                        let workflow = analyze_workflow(&path, &bytes)?;
+                        if capture_release
+                            && workflow.status == WorkflowStatus::Analyzed
+                            && let Some(doc) = parse_workflow(&bytes)
+                        {
+                            release_jobs.extend(crate::release::workflow_release_jobs(&path, &doc));
+                        }
+                        workflow
                     }
                 };
             check_count += workflow.checks.len();
@@ -153,18 +171,22 @@ impl Discovery {
             }
             report.workflows.push(workflow);
         }
-        Ok(report)
+        Ok((report, release_jobs))
     }
 }
 
-fn analyze_workflow(path: &str, bytes: &[u8]) -> Result<CiWorkflow, Error> {
+fn parse_workflow(bytes: &[u8]) -> Option<Value> {
     let options = serde_saphyr::options! {
         budget: serde_saphyr::budget! { max_depth: 32, max_events: 20000, max_aliases: 0, max_anchors: 0 },
         duplicate_keys: serde_saphyr::DuplicateKeyPolicy::Error,
     };
-    let parsed = std::str::from_utf8(bytes)
+    std::str::from_utf8(bytes)
         .ok()
-        .and_then(|s| serde_saphyr::from_str_with_options::<Value>(s, options).ok());
+        .and_then(|s| serde_saphyr::from_str_with_options::<Value>(s, options).ok())
+}
+
+fn analyze_workflow(path: &str, bytes: &[u8]) -> Result<CiWorkflow, Error> {
+    let parsed = parse_workflow(bytes);
     let Some(doc) = parsed.filter(Value::is_object) else {
         return Ok(skipped(
             path,

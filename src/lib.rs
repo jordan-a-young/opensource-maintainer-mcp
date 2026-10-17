@@ -8,3 +8,4 @@ pub mod github;
 pub mod mcp;
 pub mod model;
 pub mod overview;
+pub mod release;
