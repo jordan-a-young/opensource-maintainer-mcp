@@ -148,3 +148,49 @@ pub struct AuditCheck {
     pub evidence: Vec<String>,
     pub recommendation: Option<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct StandardsComparison {
+    pub scope: String,
+    pub projects: Vec<ComparisonProject>,
+    pub rows: Vec<ComparisonRow>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ComparisonProject {
+    pub full_name: String,
+    pub tree_sha: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservationStatus {
+    Observed,
+    Absent,
+    NotAssessed,
+    NotApplicable,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ComparisonObservation {
+    pub repository: String,
+    pub status: ObservationStatus,
+    pub values: Vec<String>,
+    pub evidence: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ComparisonStatus {
+    Same,
+    Different,
+    Incomplete,
+    NotComparable,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ComparisonRow {
+    pub id: String,
+    pub status: ComparisonStatus,
+    pub observations: Vec<ComparisonObservation>,
+}
