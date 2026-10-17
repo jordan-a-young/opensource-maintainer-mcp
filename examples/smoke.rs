@@ -10,6 +10,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(2)
         .unwrap_or_else(|| "examples/config.toml".into());
     let repository = std::env::args().nth(3);
+    let mode = std::env::args().nth(4);
+    let tool = match mode.as_deref() {
+        None => "get_project_overview",
+        Some("audit") if repository.is_some() => "audit_repository",
+        _ => return Err("optional fourth argument must be 'audit' with a repository name".into()),
+    };
     let mut command = tokio::process::Command::new(executable);
     command.arg(config);
     let client = ().serve(TokioChildProcess::new(command)?).await?;
@@ -19,15 +25,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("list_projects not advertised".into());
         }
         let request = if let Some(repository) = repository {
-            if !tools.iter().any(|t| t.name == "get_project_overview") {
-                return Err("get_project_overview not advertised".into());
+            if !tools.iter().any(|t| t.name == tool) {
+                return Err(format!("{tool} not advertised").into());
             }
-            CallToolRequestParams::new("get_project_overview").with_arguments(
-                serde_json::Map::from_iter([(
-                    "repository".into(),
-                    serde_json::Value::String(repository),
-                )]),
-            )
+            CallToolRequestParams::new(tool).with_arguments(serde_json::Map::from_iter([(
+                "repository".into(),
+                serde_json::Value::String(repository),
+            )]))
         } else {
             CallToolRequestParams::new("list_projects")
         };

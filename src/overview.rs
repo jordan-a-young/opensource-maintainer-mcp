@@ -11,8 +11,17 @@ use crate::{
 
 const MANIFEST_LIMIT: usize = 256 * 1024;
 
+pub(crate) struct Inspection {
+    pub overview: ProjectOverview,
+    pub root_files: Vec<String>,
+}
+
 impl Discovery {
     pub async fn get_project_overview(&self, repository: &str) -> Result<ProjectOverview, Error> {
+        Ok(self.inspect_project(repository).await?.overview)
+    }
+
+    pub(crate) async fn inspect_project(&self, repository: &str) -> Result<Inspection, Error> {
         if repository.is_empty()
             || repository.len() > 100
             || repository == "."
@@ -50,6 +59,15 @@ impl Discovery {
         if tree.truncated {
             return Err(Error::TruncatedTree);
         }
+        let mut root_files: Vec<_> = tree
+            .tree
+            .iter()
+            .filter(|entry| {
+                entry.kind == "blob" && matches!(entry.mode.as_str(), "100644" | "100755")
+            })
+            .map(|entry| entry.path.clone())
+            .collect();
+        root_files.sort();
         let mut manifests = Vec::new();
         let mut configuration_files = Vec::new();
         for entry in tree.tree {
@@ -102,12 +120,15 @@ impl Discovery {
         }
         manifests.sort_by(|a, b| a.path.cmp(&b.path));
         configuration_files.sort();
-        Ok(ProjectOverview {
-            topics: repo.topics.clone(),
-            project: repo.into(),
-            tree_sha: tree.sha,
-            manifests,
-            configuration_files,
+        Ok(Inspection {
+            root_files,
+            overview: ProjectOverview {
+                topics: repo.topics.clone(),
+                project: repo.into(),
+                tree_sha: tree.sha,
+                manifests,
+                configuration_files,
+            },
         })
     }
 }
