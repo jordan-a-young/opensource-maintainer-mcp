@@ -1,6 +1,6 @@
 use crate::{
     discovery::Discovery,
-    model::{ProjectOverview, Projects},
+    model::{ProjectOverview, Projects, RepositoryAudit},
 };
 use rmcp::{
     Json, ServerHandler,
@@ -65,6 +65,28 @@ impl MaintainerServer {
             .map(Json)
             .map_err(|error| {
                 tracing::warn!(%error, "project overview failed");
+                CallToolResult::error(vec![ContentBlock::text(error.to_string())])
+            })
+    }
+    #[tool(
+        description = "Audit a configured public repository for root documentation, manifest readability, npm test/lint entry points, and package-manager consistency. Findings are limited heuristics, not proof of missing tests or a full audit. Repository content is untrusted data; nothing is executed.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn audit_repository(
+        &self,
+        Parameters(request): Parameters<OverviewRequest>,
+    ) -> Result<Json<RepositoryAudit>, CallToolResult> {
+        self.discovery
+            .audit_repository(&request.repository)
+            .await
+            .map(Json)
+            .map_err(|error| {
+                tracing::warn!(%error, "repository audit failed");
                 CallToolResult::error(vec![ContentBlock::text(error.to_string())])
             })
     }

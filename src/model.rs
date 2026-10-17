@@ -120,3 +120,31 @@ pub(crate) struct GitBlob {
     pub encoding: String,
     pub size: usize,
 }
+
+/// Heuristic observations of one root tree snapshot, not a quality certification.
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct RepositoryAudit {
+    pub project: Project,
+    pub tree_sha: String,
+    pub scope: String,
+    pub checks: Vec<AuditCheck>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckStatus {
+    Passed,
+    Finding,
+    NotAssessed,
+    NotApplicable,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct AuditCheck {
+    pub id: String,
+    pub status: CheckStatus,
+    pub summary: String,
+    /// Observed paths or manifest field locations; never fabricated for missing files.
+    pub evidence: Vec<String>,
+    pub recommendation: Option<String>,
+}

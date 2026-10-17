@@ -1,7 +1,8 @@
 # Open Source Maintainer MCP
 
 A Rust MCP server that discovers **public** GitHub repositories by owner and topic.
-Milestones 1–2 provide read-only `list_projects` and `get_project_overview` tools over stdio. Owners can be
+Milestones 1–3 provide read-only `list_projects`, `get_project_overview`, and
+`audit_repository` tools over stdio. Owners can be
 GitHub users or organizations; Availity is only the example configuration.
 
 ## Setup and run
@@ -112,6 +113,59 @@ use the lower anonymous GitHub quota; listing still benefits from an optional to
 Metadata and the tree may reflect slightly different instants, but the manifests come
 from the same tree snapshot. API failures do not trigger automatic retries.
 
+### Repository audit
+
+Call `audit_repository` with `{"repository":"element"}`. It uses the same configured
+scope, validation, snapshot, public-only access, limits, and error handling as overview.
+No additional HTTP requests are needed beyond the overview inspection, and the overview
+response format remains unchanged.
+
+The structured result contains `project`, `tree_sha`, a human-readable `scope`, and
+`checks` sorted by stable `id`. Each check has `status`, `summary`, observed `evidence`
+(paths or JSON-pointer field locations), and a nullable `recommendation`.
+
+| Status | Meaning |
+| --- | --- |
+| `passed` | The narrow observation passed; it is not a quality certification. |
+| `finding` | An observed gap or inconsistency deserves review. |
+| `not_assessed` | The available evidence does not support a conclusion. |
+| `not_applicable` | The relevant root manifest is absent. |
+
+Initial rules:
+
+| Rule ID | Observation |
+| --- | --- |
+| `documentation.readme` | Recognized regular root README filename exists. |
+| `documentation.license` | Recognized regular root LICENSE, LICENCE, or COPYING filename exists. |
+| `configuration.gitignore` | Regular root `.gitignore` exists. |
+| `manifest.package.json` / `manifest.Cargo.toml` | Supported root manifest fields can be parsed. |
+| `npm.test_script` / `npm.lint_script` | Nonempty `test`/`lint` or `test:*`/`lint:*` script exists. |
+| `configuration.multiple_package_managers` | Root lockfiles come from at most one package-manager family. |
+| `configuration.package_manager` | Supported npm `packageManager` declaration agrees with observed lockfile families. |
+| `coverage.limitations` | Explicit reminder of what this audit does not assess. |
+
+README/license names are case-insensitive and accept no extension or `.md`, `.markdown`,
+`.rst`, `.txt`, `.adoc`. Their contents are not fetched. Missing documentation findings
+are limited to the root: documentation may live elsewhere. License-file presence does
+not establish licensing status. Symlinks are excluded from regular-file evidence.
+
+Script commands are never executed or reproduced in audit findings. Script presence
+cannot prove that tests or linting actually run: even an `echo` script satisfies the
+presence check. Missing conventional root scripts produce a finding for non-workspaces,
+and `not_assessed` for npm workspaces because member packages may supply tooling.
+Skipped or invalid manifests never produce missing-script findings.
+
+Lockfile families are npm (`package-lock.json`, `npm-shrinkwrap.json`), Yarn (`yarn.lock`),
+pnpm (`pnpm-lock.yaml`), and Bun (`bun.lock`, `bun.lockb`). Multiple files in the same
+family are not treated as different managers. An absent lockfile, unknown manager, or
+unparsed manifest does not produce a mismatch finding. Multiple managers can be intentional;
+findings recommend reviewing that choice, not deleting files automatically.
+
+Test source, test execution, Rust test/lint setup, config contents, nested packages,
+organization-inherited policies, CI analysis, and cross-repository comparisons remain
+outside scope. There is no score or repository-wide pass/fail claim. Upstream failures
+return a tool error, never a fabricated list of missing files.
+
 GitHub failures return MCP tool results with `isError: true` and actionable text.
 Authentication, rate limits, HTTP failures, malformed JSON, timeouts, and connection
 failures are distinguished. Raw upstream bodies and credentials are not exposed.
@@ -148,6 +202,8 @@ response mapping, pagination, filtering, HTTP errors, timeout and network failur
 discovery/invocation through an SDK client, stdio executable discovery, and startup errors.
 Overview tests additionally cover manifest parsing, scope enforcement, snapshot blob reads,
 size limits, symlinks, truncated trees, anonymous content access, and MCP parameter validation.
+Audit tests additionally verify rule evidence/statuses, workspace uncertainty, lockfile
+consistency, unchanged overview behavior, and MCP invocation without extra HTTP requests.
 GitHub Actions runs formatting, Clippy, and tests using stable Rust and the lockfile.
 
 ### Manual live smoke test
@@ -175,6 +231,15 @@ cargo run --locked --example smoke -- target/debug/opensource-maintainer-mcp exa
 Expect `project.full_name` to be `Availity/element`, a nonempty `tree_sha`, and a parsed
 root `package.json` with scripts. This uses the real public API and is not run in CI.
 
+For a live audit through the same stdio client:
+
+```sh
+cargo run --locked --example smoke -- target/debug/opensource-maintainer-mcp examples/config.toml element audit
+```
+
+Expect an audit object with stable check IDs and the tree SHA. Findings may change with
+repository contents; this smoke test is manual and is never a CI dependency.
+
 Optional interactive inspection (requires Node/npm; not required by this project):
 
 ```sh
@@ -188,6 +253,7 @@ npx @modelcontextprotocol/inspector target/debug/opensource-maintainer-mcp examp
 - `src/github.rs`: reusable HTTP client, pagination, and status handling.
 - `src/discovery.rs`: transport-independent repository filtering and sorting.
 - `src/overview.rs`: bounded snapshot inspection and pure manifest parsing.
+- `src/audit.rs`: pure audit rules and the transport-independent audit service method.
 - `src/config.rs`: typed TOML parsing and validation.
 - `src/model.rs`: GitHub wire representation and stable tool output.
 - `src/error.rs`: application error enum with `thiserror`.
@@ -212,10 +278,16 @@ of Git blobs. `pub(crate)` keeps the shared service state accessible to the over
 module without making those fields public to library consumers. Owned parser results
 move into summaries, while HTTP and parser errors remain distinct from per-file statuses.
 
+Milestone 3 separates data collection from pure rule evaluation. An internal `Inspection`
+owns both the overview and root filenames; destructuring moves them into the audit without
+fetching again. `CheckStatus` forces explicit unknown/not-applicable outcomes, borrowed
+`Option<&ManifestSummary>` lets several rules share parsed data, and `BTreeSet` compares
+package-manager families without mistaking two npm lockfiles for two different managers.
+
 ## Roadmap
 
-Future proposals only: repository audits, standards comparison, CI
+Future proposals only: standards comparison, CI
 analysis, release configuration review, and eventual agent-factory integration. No
-repository writes, database, or plugin framework are included in Milestones 1–2.
+repository writes, database, or plugin framework are included in Milestones 1–3.
 
 MIT licensed.
