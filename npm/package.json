@@ -1,0 +1,27 @@
+{
+  "name": "@jys/opensource-maintainer-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only MCP server for discovering and analyzing public GitHub repositories",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jordan-a-young/opensource-maintainer-mcp"
+  },
+  "engines": { "node": ">=22.14.0" },
+  "bin": { "opensource-maintainer-mcp": "bin/launcher.cjs" },
+  "files": ["bin/launcher.cjs", "config.example.toml"],
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
+  "optionalDependencies": {
+    "@jys/opensource-maintainer-mcp-linux-x64": "0.1.0",
+    "@jys/opensource-maintainer-mcp-win32-x64": "0.1.0",
+    "@jys/opensource-maintainer-mcp-darwin-arm64": "0.1.0",
+    "@jys/opensource-maintainer-mcp-darwin-x64": "0.1.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.cjs",
+    "test:install": "node ../scripts/test_npm_install.cjs",
+    "pack:all": "node ../scripts/npm_packages.cjs pack",
+    "stage:prepared": "node ../scripts/npm_packages.cjs stage"
+  }
+}

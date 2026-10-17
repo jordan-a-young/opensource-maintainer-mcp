@@ -74,6 +74,15 @@ it does not overwrite an existing draft or published release. If a partial draft
 recreated, a maintainer may delete **only the unpublished draft**, preserve the tag,
 and rerun the failed workflow. No automatic cleanup deletes releases or tags.
 
+## npm is the planned primary installation route
+
+The native archives also feed npm packaging. PR CI tests local npm tarball installation
+on each platform and prepares five npm packages with dry runs only. The separate manual
+npm workflow stays disabled for staging until explicitly enabled and approved. No npm
+uploads are triggered by merging or tagging. See [the npm setup guide](NPM.md), including
+why npm trust cannot be activated for brand-new packages without a separately approved
+registry bootstrap. GitHub Releases and npm approvals remain independent.
+
 ## crates.io is a separate future decision
 
 This setup prepares and validates the source package but does not configure registry
