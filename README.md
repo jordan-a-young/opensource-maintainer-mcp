@@ -1,7 +1,7 @@
 # Open Source Maintainer MCP
 
 A Rust MCP server that discovers **public** GitHub repositories by owner and topic.
-Milestone 1 provides one read-only tool, `list_projects`, over stdio. Owners can be
+Milestones 1–2 provide read-only `list_projects` and `get_project_overview` tools over stdio. Owners can be
 GitHub users or organizations; Availity is only the example configuration.
 
 ## Setup and run
@@ -69,6 +69,49 @@ returns `structuredContent` with this shape:
 ```
 
 Description and language may be null. An empty match returns `{"projects":[]}`.
+### Project overview
+
+Call `get_project_overview` with `{"repository":"element"}`. Use the simple repository
+name returned by `list_projects`; the configured owner supplies the namespace. URLs,
+`owner/name` inputs, and path traversal are rejected. The project must be public and
+match the configured topic and archived policy. Names are matched case-insensitively.
+
+The structured result contains:
+
+- `project`: the same repository metadata shape shown above.
+- `topics`: repository topics from discovery.
+- `tree_sha`: the root tree snapshot used for all manifest reads.
+- `manifests`: root `package.json` and `Cargo.toml` summaries, sorted by path.
+- `configuration_files`: sorted known root configuration filenames; contents are not read.
+
+Each manifest includes `path`, `status`, nullable `name`, `version`, and `package_manager`,
+a `workspace` flag, and a sorted `scripts` map. npm scripts are returned as data, never
+executed. Cargo summaries contain package name/version and workspace presence; inherited
+workspace versions remain null. npm workspaces are detected but members are not traversed.
+Missing manifests produce an empty list. Unsupported ecosystems and nested manifests are
+outside this milestone's scope.
+
+Statuses are `parsed`, `invalid`, `too_large`, or `unsupported_file_type`. Parsing extracts
+known fields; it is not full npm/Cargo semantic validation. Malformed manifests do not
+prevent other files from being summarized. Symlinks/submodules/directories are not read
+as manifests. Files over 256 KiB are skipped, API responses are capped at 2 MiB, and
+truncated trees fail explicitly. Upstream HTTP/decoding failures fail the tool rather
+than silently omitting data. An empty Git repository currently reports GitHub's HTTP 409.
+
+Known config names include common ESLint, Prettier, TypeScript, Jest/Vitest, build-tool,
+Rust toolchain/lint/format, package-manager lock/workspace files, `.editorconfig`, and
+`.gitignore`. This is a root-level inventory, not an audit or exhaustive file listing.
+Even `.npmrc` is listed only by name; no configuration file contents are returned.
+Repository descriptions and script strings are untrusted content for the calling agent.
+
+Overview first discovers the project using public repository listing. It then reads the
+root Git tree at the default branch and fetches at most two manifest blobs by their
+snapshot SHAs. Content requests intentionally omit `GITHUB_TOKEN`: this prevents access
+to private contents even if visibility changes after discovery. These requests therefore
+use the lower anonymous GitHub quota; listing still benefits from an optional token.
+Metadata and the tree may reflect slightly different instants, but the manifests come
+from the same tree snapshot. API failures do not trigger automatic retries.
+
 GitHub failures return MCP tool results with `isError: true` and actionable text.
 Authentication, rate limits, HTTP failures, malformed JSON, timeouts, and connection
 failures are distinguished. Raw upstream bodies and credentials are not exposed.
@@ -77,7 +120,7 @@ failures are distinguished. Raw upstream bodies and credentials are not exposed.
 
 The server uses `GET /users/{owner}/repos`, a public-repository listing endpoint that
 works for user and organization owners, in pages of 100. It filters topics and archived
-status locally, sorts and deduplicates by full name, and never fetches repository contents.
+status locally, sorts and deduplicates by full name, and never fetches repository contents during `list_projects`.
 Using the listing endpoint avoids GitHub Search's 1,000-result cap and incomplete search
 responses. Private entries are defensively excluded even if returned by an upstream.
 See [GitHub repository API documentation](https://docs.github.com/en/rest/repos/repos#list-repositories-for-a-user).
@@ -103,6 +146,8 @@ Tests use local mock servers and never require live GitHub access. After depende
 are downloaded, `cargo test --offline --all-features` also works. Tests cover configuration,
 response mapping, pagination, filtering, HTTP errors, timeout and network failure, MCP
 discovery/invocation through an SDK client, stdio executable discovery, and startup errors.
+Overview tests additionally cover manifest parsing, scope enforcement, snapshot blob reads,
+size limits, symlinks, truncated trees, anonymous content access, and MCP parameter validation.
 GitHub Actions runs formatting, Clippy, and tests using stable Rust and the lockfile.
 
 ### Manual live smoke test
@@ -121,6 +166,15 @@ excluded. GitHub metadata and topic membership can change, so this is never part
 A successful empty response is valid protocol behavior but does not prove a known fixture
 was found; inspect the returned full names when validating discovery.
 
+To smoke-test the overview of a discovered repository, add its name:
+
+```sh
+cargo run --locked --example smoke -- target/debug/opensource-maintainer-mcp examples/config.toml element
+```
+
+Expect `project.full_name` to be `Availity/element`, a nonempty `tree_sha`, and a parsed
+root `package.json` with scripts. This uses the real public API and is not run in CI.
+
 Optional interactive inspection (requires Node/npm; not required by this project):
 
 ```sh
@@ -133,6 +187,7 @@ npx @modelcontextprotocol/inspector target/debug/opensource-maintainer-mcp examp
 - `src/mcp.rs`: MCP tool metadata and conversion of domain results to protocol results.
 - `src/github.rs`: reusable HTTP client, pagination, and status handling.
 - `src/discovery.rs`: transport-independent repository filtering and sorting.
+- `src/overview.rs`: bounded snapshot inspection and pure manifest parsing.
 - `src/config.rs`: typed TOML parsing and validation.
 - `src/model.rs`: GitHub wire representation and stable tool output.
 - `src/error.rs`: application error enum with `thiserror`.
@@ -151,10 +206,16 @@ its connection pool. The MCP wrapper owns a discovery service rather than embedd
 business logic in the handler. Unit tests exercise pure logic; integration tests exercise
 real protocol serialization and mocked HTTP boundaries.
 
+Milestone 2 also introduces `BTreeMap<String, String>` for deterministic script ordering,
+`ManifestStatus` as an enum serialized to stable snake-case strings, and Base64 decoding
+of Git blobs. `pub(crate)` keeps the shared service state accessible to the overview
+module without making those fields public to library consumers. Owned parser results
+move into summaries, while HTTP and parser errors remain distinct from per-file statuses.
+
 ## Roadmap
 
-Future proposals only: project overview, repository audits, standards comparison, CI
+Future proposals only: repository audits, standards comparison, CI
 analysis, release configuration review, and eventual agent-factory integration. No
-repository writes, database, or plugin framework are included in Milestone 1.
+repository writes, database, or plugin framework are included in Milestones 1–2.
 
 MIT licensed.

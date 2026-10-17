@@ -6,6 +6,7 @@ license = "MIT"
 description = "Read-only MCP discovery of public GitHub repositories"
 
 [dependencies]
+base64 = "0.22"
 rmcp = { version = "3.5.1", features = ["server", "transport-io"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "time"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls"] }
