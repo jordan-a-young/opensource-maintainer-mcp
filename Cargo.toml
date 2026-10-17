@@ -1,0 +1,26 @@
+[package]
+name = "opensource-maintainer-mcp"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Read-only MCP discovery of public GitHub repositories"
+
+[dependencies]
+rmcp = { version = "3.5.1", features = ["server", "transport-io"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "time"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2"
+toml = "1.1"
+
+[dev-dependencies]
+wiremock = "0.6"
+rmcp = { version = "3.5.1", features = ["client", "transport-child-process"] }
+tokio = { version = "1", features = ["process"] }
+
+[lints.clippy]
+unwrap_used = "deny"
