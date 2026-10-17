@@ -16,9 +16,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("audit") if repository.is_some() => "audit_repository",
         Some("compare") if repository.is_some() => "compare_standards",
         Some("ci") if repository.is_some() => "analyze_ci",
+        Some("release") if repository.is_some() => "review_release_config",
         _ => {
             return Err(
-                "optional fourth argument must be 'audit', 'compare', or 'ci' with repository names"
+                "optional fourth argument must be 'audit', 'compare', 'ci', or 'release' with repository names"
                     .into(),
             );
         }

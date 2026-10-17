@@ -1,11 +1,11 @@
 # Contributor guidance
 
-Implement one milestone per pull request. Milestones 1–5 expose `list_projects`,
-`get_project_overview`, `audit_repository`, `compare_standards`, and `analyze_ci`.
+Implement one milestone per pull request. Milestones 1–6 expose `list_projects`,
+`get_project_overview`, `audit_repository`, `compare_standards`, `analyze_ci`, and `review_release_config`.
 Do not implement roadmap tools without explicit approval. Never merge without approval.
 
 Keep MCP handlers in `src/mcp.rs`, HTTP integration in `src/github.rs`, business logic
-in `src/discovery.rs`, `src/overview.rs`, `src/audit.rs`, `src/compare.rs`, and `src/ci.rs`, and configuration/models/errors in their
+in `src/discovery.rs`, `src/overview.rs`, `src/audit.rs`, `src/compare.rs`, `src/ci.rs`, and `src/release.rs`, and configuration/models/errors in their
 corresponding modules.
 Business logic must remain usable without MCP. Prefer concrete types over new frameworks.
 
@@ -39,3 +39,8 @@ CI analysis is bounded static inspection, not execution or a security certificat
 Follow only the pinned .github/workflows directory trees and regular workflow blobs.
 Never fetch called workflows/actions, expand matrices, or echo parser errors/workflow
 commands. Preserve job permission overrides and unknown inherited defaults.
+
+Release review inspects root npm metadata and static workflow indicators only. Never read
+npmrc/token files, execute release scripts/configuration, or publish. Keep registry URLs,
+workflow commands, and environment values out of output. A private workspace root does not
+imply its members are private. OIDC permissions never prove npm account-side trust is set up.

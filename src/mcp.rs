@@ -1,6 +1,8 @@
 use crate::{
     discovery::Discovery,
-    model::{CiAnalysis, ProjectOverview, Projects, RepositoryAudit, StandardsComparison},
+    model::{
+        CiAnalysis, ProjectOverview, Projects, ReleaseReview, RepositoryAudit, StandardsComparison,
+    },
 };
 use rmcp::{
     Json, ServerHandler,
@@ -138,6 +140,28 @@ impl MaintainerServer {
             .map(Json)
             .map_err(|error| {
                 tracing::warn!(%error, "CI analysis failed");
+                CallToolResult::error(vec![ContentBlock::text(error.to_string())])
+            })
+    }
+    #[tool(
+        description = "Review visible root npm publication settings, version/release indicators, and GitHub Actions publishing/OIDC evidence in a configured public repository. Never publishes or executes code. npm trusted-publisher account settings and runtime behavior remain unverified.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn review_release_config(
+        &self,
+        Parameters(request): Parameters<OverviewRequest>,
+    ) -> Result<Json<ReleaseReview>, CallToolResult> {
+        self.discovery
+            .review_release_config(&request.repository)
+            .await
+            .map(Json)
+            .map_err(|error| {
+                tracing::warn!(%error, "release configuration review failed");
                 CallToolResult::error(vec![ContentBlock::text(error.to_string())])
             })
     }
