@@ -1,11 +1,11 @@
 # Contributor guidance
 
-Implement one milestone per pull request. Milestones 1–4 expose `list_projects`,
-`get_project_overview`, `audit_repository`, and `compare_standards`.
+Implement one milestone per pull request. Milestones 1–5 expose `list_projects`,
+`get_project_overview`, `audit_repository`, `compare_standards`, and `analyze_ci`.
 Do not implement roadmap tools without explicit approval. Never merge without approval.
 
 Keep MCP handlers in `src/mcp.rs`, HTTP integration in `src/github.rs`, business logic
-in `src/discovery.rs`, `src/overview.rs`, `src/audit.rs`, and `src/compare.rs`, and configuration/models/errors in their
+in `src/discovery.rs`, `src/overview.rs`, `src/audit.rs`, `src/compare.rs`, and `src/ci.rs`, and configuration/models/errors in their
 corresponding modules.
 Business logic must remain usable without MCP. Prefer concrete types over new frameworks.
 
@@ -34,3 +34,8 @@ or script names alone. Keep rule evaluation pure and reuse the inspected tree sn
 Comparisons are descriptive, not policy verdicts. Preserve absent/unknown/inapplicable
 states; compare dependency declarations literally without implying resolved compatibility.
 Validate all selected repositories before content reads and reuse one discovery listing.
+
+CI analysis is bounded static inspection, not execution or a security certification.
+Follow only the pinned .github/workflows directory trees and regular workflow blobs.
+Never fetch called workflows/actions, expand matrices, or echo parser errors/workflow
+commands. Preserve job permission overrides and unknown inherited defaults.

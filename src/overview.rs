@@ -23,6 +23,11 @@ impl Discovery {
     }
 
     pub(crate) async fn inspect_project(&self, repository: &str) -> Result<Inspection, Error> {
+        let repo = self.scoped_repository(repository).await?;
+        self.inspect_repository(repo).await
+    }
+
+    pub(crate) async fn scoped_repository(&self, repository: &str) -> Result<Repository, Error> {
         validate_repository_name(repository)?;
         let config = &self.config.github;
         let repo = self
@@ -37,7 +42,7 @@ impl Discovery {
                     && r.topics.contains(&config.topic)
             })
             .ok_or(Error::ProjectNotFound)?;
-        self.inspect_repository(repo).await
+        Ok(repo)
     }
 
     // Callers must first select this metadata from scoped public discovery.

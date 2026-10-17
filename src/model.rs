@@ -194,3 +194,37 @@ pub struct ComparisonRow {
     pub status: ComparisonStatus,
     pub observations: Vec<ComparisonObservation>,
 }
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct CiAnalysis {
+    pub project: Project,
+    pub tree_sha: String,
+    pub scope: String,
+    pub checks: Vec<AuditCheck>,
+    pub workflows: Vec<CiWorkflow>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowStatus {
+    Analyzed,
+    NotAssessed,
+    TooLarge,
+    UnsupportedFileType,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct CiWorkflow {
+    pub path: String,
+    pub status: WorkflowStatus,
+    pub triggers: Vec<String>,
+    pub jobs: Vec<CiJob>,
+    pub checks: Vec<AuditCheck>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct CiJob {
+    pub id: String,
+    pub reusable_workflow: bool,
+    pub step_count: usize,
+}
