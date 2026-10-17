@@ -9,6 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = std::env::args()
         .nth(2)
         .unwrap_or_else(|| "examples/config.toml".into());
+    let repository = std::env::args().nth(3);
     let mut command = tokio::process::Command::new(executable);
     command.arg(config);
     let client = ().serve(TokioChildProcess::new(command)?).await?;
@@ -17,9 +18,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if !tools.iter().any(|t| t.name == "list_projects") {
             return Err("list_projects not advertised".into());
         }
-        let result = client
-            .call_tool(CallToolRequestParams::new("list_projects"))
-            .await?;
+        let request = if let Some(repository) = repository {
+            if !tools.iter().any(|t| t.name == "get_project_overview") {
+                return Err("get_project_overview not advertised".into());
+            }
+            CallToolRequestParams::new("get_project_overview").with_arguments(
+                serde_json::Map::from_iter([(
+                    "repository".into(),
+                    serde_json::Value::String(repository),
+                )]),
+            )
+        } else {
+            CallToolRequestParams::new("list_projects")
+        };
+        let result = client.call_tool(request).await?;
         if result.is_error == Some(true) {
             return Err(format!("tool failed: {:?}", result.content).into());
         }

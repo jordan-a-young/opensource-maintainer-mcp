@@ -4,3 +4,4 @@ pub mod error;
 pub mod github;
 pub mod mcp;
 pub mod model;
+pub mod overview;

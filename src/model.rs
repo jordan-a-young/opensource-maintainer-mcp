@@ -65,3 +65,58 @@ mod tests {
         assert!(!project.archived);
     }
 }
+
+/// Root-level observations; no configuration or script is executed.
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ProjectOverview {
+    pub project: Project,
+    pub topics: Vec<String>,
+    pub tree_sha: String,
+    pub manifests: Vec<ManifestSummary>,
+    pub configuration_files: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ManifestStatus {
+    Parsed,
+    Invalid,
+    TooLarge,
+    UnsupportedFileType,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ManifestSummary {
+    pub path: String,
+    pub status: ManifestStatus,
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub package_manager: Option<String>,
+    pub workspace: bool,
+    pub scripts: std::collections::BTreeMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct GitTree {
+    pub sha: String,
+    pub truncated: bool,
+    pub tree: Vec<GitEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct GitEntry {
+    pub path: String,
+    pub mode: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub sha: String,
+    pub size: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct GitBlob {
+    pub sha: String,
+    pub content: String,
+    pub encoding: String,
+    pub size: usize,
+}

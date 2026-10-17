@@ -7,8 +7,8 @@ use crate::{
 
 #[derive(Clone)]
 pub struct Discovery {
-    config: Config,
-    github: GithubClient,
+    pub(crate) config: Config,
+    pub(crate) github: GithubClient,
 }
 
 impl Discovery {

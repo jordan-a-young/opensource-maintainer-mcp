@@ -21,4 +21,14 @@ pub enum Error {
     InvalidResponse,
     #[error("GitHub pagination exceeded the safety limit; results were not returned")]
     PaginationLimit,
+    #[error("repository must be a simple GitHub repository name, not an owner/name or URL")]
+    InvalidRepositoryName,
+    #[error(
+        "repository is not a public project matching the configured owner, topic, and archive policy"
+    )]
+    ProjectNotFound,
+    #[error("GitHub returned a truncated tree; overview would be incomplete")]
+    TruncatedTree,
+    #[error("GitHub response exceeded the 2 MiB overview response limit")]
+    ResponseTooLarge,
 }
