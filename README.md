@@ -220,6 +220,8 @@ Known config names include common ESLint, Prettier, TypeScript, Jest/Vitest, bui
 Rust toolchain/lint/format, package-manager lock/workspace files, `.editorconfig`, and
 `.gitignore`. This is a root-level inventory, not an audit or exhaustive file listing.
 Even `.npmrc` is listed only by name; no configuration file contents are returned.
+The inventory includes `npm-shrinkwrap.json`, Yarn's `.yarnrc`/`.yarnrc.yml`,
+and `pnpm-workspace.yaml`; their contents are not inspected.
 Repository descriptions and script strings are untrusted content for the calling agent.
 
 Overview first discovers the project using public repository listing. It then reads the
@@ -270,6 +272,10 @@ Script commands are never executed or reproduced in audit findings. Script prese
 cannot prove that tests or linting actually run: even an `echo` script satisfies the
 presence check. Missing conventional root scripts produce a finding for non-workspaces,
 and `not_assessed` for npm workspaces because member packages may supply tooling.
+The same uncertainty applies when a regular root `pnpm-workspace.yaml` is present,
+even without a `package.json` workspaces field. This filename is evidence of possible
+member tooling, not validation of workspace configuration. Manifest workspace flags
+continue to describe manifest declarations only.
 Skipped or invalid manifests never produce missing-script findings.
 
 Lockfile families are npm (`package-lock.json`, `npm-shrinkwrap.json`), Yarn (`yarn.lock`),
@@ -400,8 +406,9 @@ are not inspected. Name/version checks observe nonempty strings, not npm-name or
 validity. Recognized GitHub repository coordinates are compared with the selected project.
 Malformed fields remain unknown. Findings describe observed declarations, not publishability.
 
-Workflow observations identify direct npm/pnpm publish commands, yarn npm publish,
-npm/pnpm release-script invocations, selected npx release tools, Changesets/release-please
+Workflow observations identify direct npm/pnpm/Yarn Classic publish commands, yarn npm publish,
+npm/pnpm/Yarn release-script invocations (including Yarn/pnpm shorthand and npm run-script),
+selected npx, pnpm exec/dlx, and yarn dlx release tools, Changesets/release-please
 actions, and untraversed reusable workflow calls. This is conservative text inspection:
 indirection, shell control flow, expressions, matrices, action internals, and actual execution
 are not resolved. Each workflow retains its analysis/skip status. Jobs expose evidence

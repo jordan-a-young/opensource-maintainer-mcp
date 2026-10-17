@@ -76,6 +76,69 @@ async fn fixture(mock: &MockServer) {
 }
 
 #[tokio::test]
+async fn inventories_package_manager_files_without_reading_configuration() {
+    let mock = MockServer::start().await;
+    listing(&mock, json!([repository()])).await;
+    let names = [
+        ".npmrc",
+        ".yarnrc",
+        ".yarnrc.yml",
+        "npm-shrinkwrap.json",
+        "pnpm-workspace.yaml",
+    ];
+    let mut entries: Vec<_> = names.iter().map(|name| entry(name, "config", 10)).collect();
+    let mut symlink = entry("yarn.lock", "symlink", 10);
+    symlink["mode"] = json!("120000");
+    entries.push(symlink);
+    tree(&mock, entries, false).await;
+    let overview = service(&mock)
+        .get_project_overview("demo")
+        .await
+        .expect("overview");
+    assert_eq!(overview.configuration_files, names);
+    assert_eq!(mock.received_requests().await.expect("requests").len(), 2);
+}
+
+#[tokio::test]
+async fn pnpm_workspace_audit_uses_only_regular_root_filename_evidence() {
+    use opensource_maintainer_mcp::model::CheckStatus;
+    for (mode, expected) in [
+        ("100644", CheckStatus::NotAssessed),
+        ("120000", CheckStatus::Finding),
+    ] {
+        let mock = MockServer::start().await;
+        let content = b"{}";
+        listing(&mock, json!([repository()])).await;
+        let mut workspace = entry("pnpm-workspace.yaml", "config", 10);
+        workspace["mode"] = json!(mode);
+        tree(
+            &mock,
+            vec![entry("package.json", "npm-sha", content.len()), workspace],
+            false,
+        )
+        .await;
+        blob(&mock, "npm-sha", content).await;
+        let report = service(&mock)
+            .audit_repository("demo")
+            .await
+            .expect("audit");
+        for id in ["npm.test_script", "npm.lint_script"] {
+            let check = report
+                .checks
+                .iter()
+                .find(|check| check.id == id)
+                .expect("check");
+            assert_eq!(check.status, expected);
+            assert_eq!(
+                check.evidence.contains(&"pnpm-workspace.yaml".into()),
+                mode == "100644"
+            );
+        }
+        assert_eq!(mock.received_requests().await.expect("requests").len(), 3);
+    }
+}
+
+#[tokio::test]
 async fn malformed_workspace_declarations_do_not_infer_member_tooling() {
     use opensource_maintainer_mcp::model::CheckStatus;
 
