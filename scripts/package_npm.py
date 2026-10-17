@@ -1,4 +1,5 @@
 """Generate local npm package directories from tested native binaries; never publish."""
+
 import argparse
 import json
 from pathlib import Path
@@ -20,10 +21,14 @@ PLATFORMS = {
 def manifest(version):
     data = json.loads((ROOT / "npm/package.json").read_text(encoding="utf-8"))
     if data["version"] != version or not data.get("private"):
-        raise ValueError("Source npm manifest must be private and match Cargo's version")
-    expected = {f'{data["name"]}-{os}-{cpu}': version for os, cpu in PLATFORMS.values()}
+        raise ValueError(
+            "Source npm manifest must be private and match Cargo's version"
+        )
+    expected = {f"{data['name']}-{os}-{cpu}": version for os, cpu in PLATFORMS.values()}
     if data.get("optionalDependencies") != expected:
-        raise ValueError("Optional native packages must exactly match the release version and platforms")
+        raise ValueError(
+            "Optional native packages must exactly match the release version and platforms"
+        )
     data.pop("private")
     data.pop("scripts")
     return data
@@ -31,7 +36,9 @@ def manifest(version):
 
 def write_package(destination, data):
     destination.mkdir(parents=True)
-    (destination / "package.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    (destination / "package.json").write_text(
+        json.dumps(data, indent=2) + "\n", encoding="utf-8"
+    )
     shutil.copyfile(ROOT / "LICENSE", destination / "LICENSE")
     shutil.copyfile(ROOT / "npm/README.md", destination / "README.md")
 
@@ -52,8 +59,22 @@ def prepare(version, targets, binary_reader):
         system, cpu = PLATFORMS[target]
         suffix = f"{system}-{cpu}"
         binary_name = NAME + (".exe" if system == "win32" else "")
-        native = {key: data[key] for key in ["version", "description", "license", "repository", "publishConfig"]}
-        native.update(name=f'{data["name"]}-{suffix}', os=[system], cpu=[cpu], files=[f"bin/{binary_name}"])
+        native = {
+            key: data[key]
+            for key in [
+                "version",
+                "description",
+                "license",
+                "repository",
+                "publishConfig",
+            ]
+        }
+        native.update(
+            name=f"{data['name']}-{suffix}",
+            os=[system],
+            cpu=[cpu],
+            files=[f"bin/{binary_name}"],
+        )
         if system == "linux":
             native["libc"] = ["glibc"]
         destination = packages / suffix
@@ -70,7 +91,10 @@ def archive_binary(archives, version, target, name):
     if "windows" in target:
         with zipfile.ZipFile(archive) as bundle:
             info = bundle.getinfo(name)
-            if info.file_size > limit or (info.external_attr >> 16) & 0o170000 == 0o120000:
+            if (
+                info.file_size > limit
+                or (info.external_attr >> 16) & 0o170000 == 0o120000
+            ):
                 raise ValueError("Unsupported binary archive entry")
             return bundle.read(info)
     with tarfile.open(archive) as bundle:
@@ -88,14 +112,25 @@ def main():
     args = parser.parse_args()
     version, target_dir = metadata()
     if args.archives:
-        verify(args.archives, version)
-        prepare(version, TARGETS, lambda target, name: archive_binary(args.archives, version, target, name))
+        archives = args.archives.resolve()
+        verify(archives, version)
+        output = (ROOT / "npm-dist").resolve()
+        inputs = [archives, *(path.resolve() for path in archives.iterdir())]
+        if any(path == output or output in path.parents for path in inputs):
+            raise ValueError("Release archive inputs must not overlap npm-dist output")
+        prepare(
+            version,
+            TARGETS,
+            lambda target, name: archive_binary(archives, version, target, name),
+        )
     else:
+
         def read_binary(target, name):
             source = target_dir / target / "release" / name
             if not source.is_file() or source.is_symlink():
                 raise ValueError("Expected a regular built binary")
             return source.read_bytes()
+
         prepare(version, [args.target], read_binary)
 
 

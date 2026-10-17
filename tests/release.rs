@@ -178,6 +178,83 @@ async fn absent_symlink_and_oversized_root_packages_are_not_fetched() {
     }
 }
 #[tokio::test]
+async fn workspace_declarations_preserve_unknown_and_supported_states() {
+    for (declaration, status, workspace) in [
+        (Some(json!(true)), ObservationStatus::NotAssessed, false),
+        (Some(json!(false)), ObservationStatus::NotAssessed, false),
+        (
+            Some(json!("packages/*")),
+            ObservationStatus::NotAssessed,
+            false,
+        ),
+        (Some(json!(42)), ObservationStatus::NotAssessed, false),
+        (None, ObservationStatus::Observed, false),
+        (Some(Value::Null), ObservationStatus::Observed, false),
+        (Some(json!([])), ObservationStatus::Observed, true),
+        (
+            Some(json!(["packages/*"])),
+            ObservationStatus::Observed,
+            true,
+        ),
+        (
+            Some(json!({"packages":["packages/*"]})),
+            ObservationStatus::Observed,
+            true,
+        ),
+    ] {
+        let mut package = json!({"private":true});
+        if let Some(declaration) = declaration {
+            package["workspaces"] = declaration;
+        }
+        let bytes = serde_json::to_vec(&package).expect("fixture");
+        let mock = MockServer::start().await;
+        listing(&mock).await;
+        tree(
+            &mock,
+            "main",
+            "root",
+            vec![entry(
+                "package.json",
+                "package",
+                "blob",
+                "100644",
+                bytes.len(),
+            )],
+            false,
+        )
+        .await;
+        blob(&mock, "package", &bytes).await;
+        let report = service(&mock)
+            .review_release_config("demo")
+            .await
+            .expect("review");
+        assert_eq!(report.package.status, status, "{package}");
+        assert_eq!(report.package.workspace, workspace, "{package}");
+        let package_checks: Vec<_> = report
+            .checks
+            .iter()
+            .filter(|c| c.id.starts_with("package."))
+            .collect();
+        if status == ObservationStatus::NotAssessed {
+            assert_eq!(package_checks.len(), 1);
+            assert_eq!(package_checks[0].id, "package.coverage");
+            assert_eq!(package_checks[0].status, CheckStatus::NotAssessed);
+        } else {
+            assert!(!package_checks.iter().any(|c| c.id == "package.coverage"));
+            for id in ["package.name", "package.version"] {
+                assert_eq!(
+                    package_checks
+                        .iter()
+                        .find(|c| c.id == id)
+                        .expect("check")
+                        .status,
+                    CheckStatus::NotApplicable
+                );
+            }
+        }
+    }
+}
+#[tokio::test]
 async fn skipped_workflow_does_not_generate_release_claims() {
     let mock = MockServer::start().await;
     directories(

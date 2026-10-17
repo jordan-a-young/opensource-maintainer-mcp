@@ -173,6 +173,13 @@ fn review_package(bytes: &[u8], full_name: &str) -> (ReleasePackage, Vec<AuditCh
     if !doc.is_object() {
         return (empty_package(ObservationStatus::NotAssessed), vec![]);
     }
+    // The boolean workspace field cannot represent uncertainty. As in overview,
+    // null is absent; other unsupported declarations leave the package unassessed.
+    let workspace = match doc.get("workspaces") {
+        None | Some(Value::Null) => false,
+        Some(Value::Array(_) | Value::Object(_)) => true,
+        _ => return (empty_package(ObservationStatus::NotAssessed), vec![]),
+    };
     let mut package = empty_package(ObservationStatus::Observed);
     package.name = doc.get("name").and_then(Value::as_str).map(str::to_owned);
     package.version = doc
@@ -180,9 +187,7 @@ fn review_package(bytes: &[u8], full_name: &str) -> (ReleasePackage, Vec<AuditCh
         .and_then(Value::as_str)
         .map(str::to_owned);
     package.private = doc.get("private").and_then(Value::as_bool);
-    package.workspace = doc
-        .get("workspaces")
-        .is_some_and(|v| v.is_array() || v.is_object());
+    package.workspace = workspace;
     if let Some(scripts) = doc.get("scripts").and_then(Value::as_object) {
         package.script_names = scripts
             .iter()

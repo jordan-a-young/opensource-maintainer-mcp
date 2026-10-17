@@ -1,4 +1,5 @@
 """Offline regression tests for native npm manifests and archive extraction."""
+
 import copy
 import json
 from pathlib import Path
@@ -9,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 import package_npm
-from package_release import archive_name
+from package_release import NAME, archive_name, package
 
 
 class NpmPackagingTests(unittest.TestCase):
@@ -18,7 +19,12 @@ class NpmPackagingTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.source = json.loads((package_npm.ROOT / "npm/package.json").read_text())
-        for name in ["LICENSE", "npm/README.md", "npm/bin/launcher.cjs", "examples/config.toml"]:
+        for name in [
+            "LICENSE",
+            "npm/README.md",
+            "npm/bin/launcher.cjs",
+            "examples/config.toml",
+        ]:
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("fixture")
@@ -29,6 +35,85 @@ class NpmPackagingTests(unittest.TestCase):
 
     def write_source(self, data):
         (self.root / "npm/package.json").write_text(json.dumps(data))
+
+    def make_archives(self, destination):
+        for name in ["README.md", "docs/RELEASING.md"]:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture")
+        target_dir = self.root / "target"
+        for target in package_npm.TARGETS:
+            name = NAME + (".exe" if "windows" in target else "")
+            binary = target_dir / target / "release" / name
+            binary.parent.mkdir(parents=True, exist_ok=True)
+            binary.write_bytes(b"fixture binary")
+            package(self.root, target_dir, destination, "0.1.0", target)
+
+    def run_main(self, archives):
+        with (
+            patch("sys.argv", ["package_npm.py", "--archives", str(archives)]),
+            patch.object(
+                package_npm, "metadata", return_value=("0.1.0", self.root / "target")
+            ),
+        ):
+            package_npm.main()
+
+    def assert_overlap_preserves_archives(self, archives):
+        before = {path.name: path.read_bytes() for path in archives.iterdir()}
+        with self.assertRaisesRegex(ValueError, "overlap"):
+            self.run_main(archives)
+        self.assertEqual(
+            {path.name: path.read_bytes() for path in archives.iterdir()}, before
+        )
+
+    def test_main_rejects_archives_in_output_without_deleting_inputs(self):
+        archives = self.root / "npm-dist"
+        self.make_archives(archives)
+        self.assert_overlap_preserves_archives(archives)
+
+    def test_main_rejects_nested_archives_without_deleting_inputs(self):
+        archives = self.root / "npm-dist/archives"
+        self.make_archives(archives)
+        self.assert_overlap_preserves_archives(archives)
+
+    def test_main_rejects_symlink_alias_to_nested_archives(self):
+        archives = self.root / "npm-dist/archives"
+        self.make_archives(archives)
+        alias = self.root / "archive-alias"
+        try:
+            alias.symlink_to(archives, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f"Directory symlinks unavailable: {error}")
+        self.assert_overlap_preserves_archives(alias)
+
+    def test_main_rejects_archive_files_linked_into_output(self):
+        archives = self.root / "npm-dist/archives"
+        self.make_archives(archives)
+        aliases = self.root / "dist"
+        aliases.mkdir()
+        try:
+            for archive in archives.iterdir():
+                (aliases / archive.name).symlink_to(archive)
+        except OSError as error:
+            self.skipTest(f"File symlinks unavailable: {error}")
+        self.assert_overlap_preserves_archives(aliases)
+
+    def test_main_packages_external_archives_and_preserves_inputs(self):
+        archives = self.root / "dist"
+        self.make_archives(archives)
+        before = {path.name: path.read_bytes() for path in archives.iterdir()}
+        self.run_main(archives)
+        packages = self.root / "npm-dist/packages"
+        self.assertEqual(len(list(packages.iterdir())), 5)
+        for system, cpu in package_npm.PLATFORMS.values():
+            name = NAME + (".exe" if system == "win32" else "")
+            self.assertEqual(
+                (packages / f"{system}-{cpu}/bin" / name).read_bytes(),
+                b"fixture binary",
+            )
+        self.assertEqual(
+            {path.name: path.read_bytes() for path in archives.iterdir()}, before
+        )
 
     def test_generates_five_allowlisted_packages_without_install_scripts(self):
         package_npm.prepare("0.1.0", package_npm.TARGETS, lambda *_: b"binary")
@@ -43,7 +128,9 @@ class NpmPackagingTests(unittest.TestCase):
         self.assertEqual(linux["libc"], ["glibc"])
         self.assertEqual(linux["os"], ["linux"])
         self.assertEqual(linux["cpu"], ["x64"])
-        self.assertTrue((root / "win32-x64/bin/opensource-maintainer-mcp.exe").is_file())
+        self.assertTrue(
+            (root / "win32-x64/bin/opensource-maintainer-mcp.exe").is_file()
+        )
 
     def test_rejects_version_drift_and_nonprivate_source_manifest(self):
         with self.assertRaises(ValueError):
@@ -64,7 +151,9 @@ class NpmPackagingTests(unittest.TestCase):
             entry.linkname = "/etc/passwd"
             bundle.addfile(entry)
         with self.assertRaises(ValueError):
-            package_npm.archive_binary(self.root, "0.1.0", target, "opensource-maintainer-mcp")
+            package_npm.archive_binary(
+                self.root, "0.1.0", target, "opensource-maintainer-mcp"
+            )
 
 
 class CargoPackageBoundaryTests(unittest.TestCase):
@@ -77,7 +166,10 @@ class CargoPackageBoundaryTests(unittest.TestCase):
                 (Path(directory) / name).write_text("generated package fixture")
             result = subprocess.run(
                 ["cargo", "package", "--list", "--locked", "--allow-dirty"],
-                cwd=root, capture_output=True, text=True, check=True,
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=True,
             )
             paths = result.stdout.splitlines()
             self.assertIn("README.md", paths)

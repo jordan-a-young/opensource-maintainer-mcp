@@ -100,13 +100,9 @@ impl GithubClient {
                 ("direction", "asc"),
             ]))
             .await?;
-            let batch: Vec<Repository> = response.json().await.map_err(|e| {
-                if e.is_timeout() {
-                    Error::Timeout
-                } else {
-                    Error::InvalidResponse
-                }
-            })?;
+            let body = response.bytes().await.map_err(network_error)?;
+            let batch: Vec<Repository> =
+                serde_json::from_slice(&body).map_err(|_| Error::InvalidResponse)?;
             let done = batch.len() < 100;
             repositories.extend(batch);
             if done {
