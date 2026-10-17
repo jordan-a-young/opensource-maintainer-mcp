@@ -37,7 +37,8 @@ async fn discovers_and_invokes_tool_with_structured_output_and_errors() {
         });
         let client = ().serve(client_io).await.expect("initialize");
         let tools = client.list_all_tools().await.expect("tools");
-        assert_eq!(tools.len(), 4);
+        assert_eq!(tools.len(), 5);
+        assert!(tools.iter().any(|tool| tool.name == "analyze_ci"));
         assert!(tools.iter().any(|tool| tool.name == "compare_standards"));
         assert!(tools.iter().any(|tool| tool.name == "audit_repository"));
         assert!(tools.iter().any(|tool| tool.name == "list_projects"));
@@ -77,7 +78,8 @@ async fn executable_speaks_stdio_and_discovers_tool_without_network() {
     let transport = TokioChildProcess::new(command).expect("spawn");
     let client = ().serve(transport).await.expect("stdio initialization");
     let tools = client.list_all_tools().await.expect("tools/list");
-    assert_eq!(tools.len(), 4);
+    assert_eq!(tools.len(), 5);
+    assert!(tools.iter().any(|tool| tool.name == "analyze_ci"));
     assert!(tools.iter().any(|tool| tool.name == "compare_standards"));
     assert!(tools.iter().any(|tool| tool.name == "audit_repository"));
     assert!(tools.iter().any(|tool| tool.name == "list_projects"));

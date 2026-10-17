@@ -6,6 +6,7 @@ license = "MIT"
 description = "Read-only MCP discovery of public GitHub repositories"
 
 [dependencies]
+serde-saphyr = { version = "2.0", default-features = false, features = ["deserialize"] }
 base64 = "0.22"
 rmcp = { version = "3.5.1", features = ["server", "transport-io"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "time"] }

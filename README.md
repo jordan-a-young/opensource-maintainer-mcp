@@ -1,8 +1,8 @@
 # Open Source Maintainer MCP
 
 A Rust MCP server that discovers **public** GitHub repositories by owner and topic.
-Milestones 1–4 provide read-only `list_projects`, `get_project_overview`, and
-`audit_repository`, and `compare_standards` tools over stdio. Owners can be
+Milestones 1–5 provide read-only `list_projects`, `get_project_overview`, and
+`audit_repository`, `compare_standards`, and `analyze_ci` tools over stdio. Owners can be
 GitHub users or organizations; Availity is only the example configuration.
 
 ## Setup and run
@@ -214,6 +214,56 @@ separate snapshots, so the group is not an atomic point-in-time view.
 Existing overview and audit output formats remain unchanged. Dependency declarations
 are retained internally during the same manifest reads, not fetched separately.
 
+### GitHub Actions analysis
+
+Call `analyze_ci` with `{"repository":"element"}`. The tool validates the configured
+public owner/topic/archive scope, reads the root tree, follows `.github` and `workflows`
+by their snapshot SHAs, and fetches only direct `.yml`/`.yaml` workflow blobs. It does
+not read root package manifests, invoke Actions, or change repository settings.
+
+The result contains `project`, root `tree_sha`, `scope`, discovery `checks`, and sorted
+`workflows`. Each workflow includes its path, status, sorted trigger names, job summaries
+(ID, reusable-workflow flag, step count), and checks with stable IDs and field evidence.
+Workflow status is `analyzed`, `not_assessed`, `too_large`, or `unsupported_file_type`.
+An `analyzed` status means the supported structure was inspected, not that the full
+workflow is valid or secure. Individual checks can still be unassessed.
+
+| Rule | Observation |
+| --- | --- |
+| `workflows.discovery` | Workflow directory/candidates exist; absence does not imply no CI elsewhere. |
+| `workflow.elevated_trigger` | `pull_request_target` or `workflow_run` deserves trust-boundary review. |
+| `workflow.concurrency` | Workflow concurrency key or concurrency keys on every job are present; behavior is not evaluated. |
+| `job.<id>.permissions` | Job-level permissions override workflow declarations; unknown repository defaults remain unassessed. |
+| `job.<id>.timeout` | Ordinary jobs have explicit numeric timeouts; reusable-job internals are not inspected. |
+| `job.<id>.step.<index>.reference` | Remote actions use a full commit SHA; containers use a SHA-256 digest. |
+| `job.<id>.reference` | Reusable-workflow reference pinning, without fetching the called workflow. |
+
+Write permissions can be necessary; findings ask for review rather than claiming a
+vulnerability. Missing explicit timeouts use GitHub defaults. Missing concurrency can
+be intentional. Numeric job timeouts from 1–360 minutes are recognized; expressions
+are not evaluated. Local action/workflow references are not applicable to remote pinning.
+Pinning does not prove the referenced code is trustworthy. Evidence uses file paths and
+JSON-pointer-like field locations, not guessed source line numbers.
+
+Limits: 20 workflow candidates, 128 KiB per workflow, 50 jobs per workflow, 200 steps per
+job, and 1,000 checks per report. Count limits fail the operation instead of truncating.
+Oversized files and symlinks receive explicit skipped statuses; they are never followed.
+The existing 2 MiB API-response bound, request timeouts, and anonymous content access apply.
+Truncated trees, corrupt blob responses, and HTTP errors fail the tool, rather than
+becoming missing-workflow findings.
+
+YAML is parsed with `serde-saphyr` using a depth limit of 32 and 20,000 parser events.
+Duplicate keys are rejected; anchors/aliases are deliberately unsupported in this first
+version. Those files, malformed YAML, and unsupported trigger/job shapes are reported
+as `not_assessed`, without exposing raw parser errors. Includes/properties features are
+not enabled. Script bodies, environment values, and secrets are never returned by this
+tool or executed. YAML string/array/mapping forms of `on` are supported.
+
+Run history, branch protection, matrix expansion, expression evaluation, called workflow
+and action contents, complete workflow-schema validation, and release configuration
+remain outside scope. See [GitHub workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
+for the semantics behind these checks.
+
 GitHub failures return MCP tool results with `isError: true` and actionable text.
 Authentication, rate limits, HTTP failures, malformed JSON, timeouts, and connection
 failures are distinguished. Raw upstream bodies and credentials are not exposed.
@@ -255,6 +305,9 @@ consistency, unchanged overview behavior, and MCP invocation without extra HTTP 
 Comparison tests additionally cover scoped names, separate dependency sections, Cargo inheritance,
 unknown versus absent values, deterministic ordering, row limits, one shared listing,
 all-project scope validation, upstream failures, and MCP parameters/invocation.
+CI analyzer tests cover YAML trigger forms, permission overrides, unknown defaults,
+reusable jobs, timeouts, immutable references, parser budgets, snapshot traversal,
+skipped files, count limits, HTTP failures, and MCP schema/invocation/validation.
 GitHub Actions runs formatting, Clippy, and tests using stable Rust and the lockfile.
 
 ### Manual live smoke test
@@ -300,6 +353,15 @@ cargo run --locked --example smoke -- target/debug/opensource-maintainer-mcp exa
 This manual check uses public GitHub and is never run in CI. Expect two project snapshots
 and rows containing conventions and declared dependency versions.
 
+For a live workflow analysis:
+
+```sh
+cargo run --locked --example smoke -- target/debug/opensource-maintainer-mcp examples/config.toml element ci
+```
+
+Expect workflow summaries and explicit per-file/check statuses. This is a manual live
+API check, not a CI dependency; workflow counts and findings can change over time.
+
 Optional interactive inspection (requires Node/npm; not required by this project):
 
 ```sh
@@ -315,6 +377,7 @@ npx @modelcontextprotocol/inspector target/debug/opensource-maintainer-mcp examp
 - `src/overview.rs`: bounded snapshot inspection and pure manifest parsing.
 - `src/audit.rs`: pure audit rules and the transport-independent audit service method.
 - `src/compare.rs`: dependency extraction and deterministic cross-project comparison.
+- `src/ci.rs`: bounded workflow discovery, YAML parsing, and static CI checks.
 - `src/config.rs`: typed TOML parsing and validation.
 - `src/model.rs`: GitHub wire representation and stable tool output.
 - `src/error.rs`: application error enum with `thiserror`.
@@ -351,10 +414,15 @@ comparison helpers borrow it while building response observations. Separate enum
 observation availability and comparison outcomes, preventing unknown data from silently
 becoming a missing dependency. The shared inspection path preserves the earlier tools.
 
+Milestone 5 uses `Option::or_else` to model job-level permission overrides, pattern matching
+to distinguish supported YAML shapes, and explicit workflow-status enums for skipped data.
+The YAML parser options use its builder macros because the public structs are
+`non_exhaustive`: downstream code must allow the library to add fields in future releases.
+Network collection and pure YAML analysis remain separate and independently testable.
+
 ## Roadmap
 
-Future proposals only: CI
-analysis, release configuration review, and eventual agent-factory integration. No
-repository writes, database, or plugin framework are included in Milestones 1–4.
+Future proposals only: release configuration review and eventual agent-factory integration. No
+repository writes, database, or plugin framework are included in Milestones 1–5.
 
 MIT licensed.

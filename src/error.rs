@@ -28,6 +28,10 @@ pub enum Error {
     #[error("comparison exceeds 500 rows; choose repositories with smaller root manifests")]
     ComparisonTooLarge,
     #[error(
+        "CI analysis exceeds the limit of 20 workflows, 50 jobs per workflow, 200 steps per job, or 1000 checks total"
+    )]
+    CiAnalysisLimit,
+    #[error(
         "repository is not a public project matching the configured owner, topic, and archive policy"
     )]
     ProjectNotFound,
