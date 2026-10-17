@@ -6,7 +6,7 @@ use serde::Deserialize;
 use crate::{
     discovery::Discovery,
     error::Error,
-    model::{GitBlob, GitTree, ManifestStatus, ManifestSummary, ProjectOverview},
+    model::{GitBlob, GitTree, ManifestStatus, ManifestSummary, ProjectOverview, Repository},
 };
 
 const MANIFEST_LIMIT: usize = 256 * 1024;
@@ -14,6 +14,7 @@ const MANIFEST_LIMIT: usize = 256 * 1024;
 pub(crate) struct Inspection {
     pub overview: ProjectOverview,
     pub root_files: Vec<String>,
+    pub dependencies: Vec<crate::compare::DependencyManifest>,
 }
 
 impl Discovery {
@@ -22,16 +23,7 @@ impl Discovery {
     }
 
     pub(crate) async fn inspect_project(&self, repository: &str) -> Result<Inspection, Error> {
-        if repository.is_empty()
-            || repository.len() > 100
-            || repository == "."
-            || repository == ".."
-            || !repository
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
-        {
-            return Err(Error::InvalidRepositoryName);
-        }
+        validate_repository_name(repository)?;
         let config = &self.config.github;
         let repo = self
             .github
@@ -45,6 +37,12 @@ impl Discovery {
                     && r.topics.contains(&config.topic)
             })
             .ok_or(Error::ProjectNotFound)?;
+        self.inspect_repository(repo).await
+    }
+
+    // Callers must first select this metadata from scoped public discovery.
+    pub(crate) async fn inspect_repository(&self, repo: Repository) -> Result<Inspection, Error> {
+        let config = &self.config.github;
         let tree: GitTree = self
             .github
             .public_json(&[
@@ -68,6 +66,7 @@ impl Discovery {
             .map(|entry| entry.path.clone())
             .collect();
         root_files.sort();
+        let mut dependencies = Vec::new();
         let mut manifests = Vec::new();
         let mut configuration_files = Vec::new();
         for entry in tree.tree {
@@ -107,6 +106,7 @@ impl Discovery {
                         if bytes.len() != blob.size {
                             return Err(Error::InvalidResponse);
                         }
+                        dependencies.push(crate::compare::parse_dependencies(&entry.path, &bytes));
                         parse_manifest(&entry.path, &bytes)
                     }
                 };
@@ -122,6 +122,7 @@ impl Discovery {
         configuration_files.sort();
         Ok(Inspection {
             root_files,
+            dependencies,
             overview: ProjectOverview {
                 topics: repo.topics.clone(),
                 project: repo.into(),
@@ -241,6 +242,20 @@ fn is_configuration(path: &str) -> bool {
             )
         })
     })
+}
+
+pub(crate) fn validate_repository_name(repository: &str) -> Result<(), Error> {
+    if repository.is_empty()
+        || repository.len() > 100
+        || repository == "."
+        || repository == ".."
+        || !repository
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+    {
+        return Err(Error::InvalidRepositoryName);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

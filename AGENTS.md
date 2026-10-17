@@ -1,11 +1,11 @@
 # Contributor guidance
 
-Implement one milestone per pull request. Milestones 1–3 expose `list_projects`,
-`get_project_overview`, and `audit_repository`.
+Implement one milestone per pull request. Milestones 1–4 expose `list_projects`,
+`get_project_overview`, `audit_repository`, and `compare_standards`.
 Do not implement roadmap tools without explicit approval. Never merge without approval.
 
 Keep MCP handlers in `src/mcp.rs`, HTTP integration in `src/github.rs`, business logic
-in `src/discovery.rs`, `src/overview.rs`, and `src/audit.rs`, and configuration/models/errors in their
+in `src/discovery.rs`, `src/overview.rs`, `src/audit.rs`, and `src/compare.rs`, and configuration/models/errors in their
 corresponding modules.
 Business logic must remain usable without MCP. Prefer concrete types over new frameworks.
 
@@ -30,3 +30,7 @@ access. Do not follow upstream blob URLs or symlinks.
 Audit rules must distinguish findings from unknown/not-applicable cases. Keep rule IDs stable,
 include only observed evidence, and avoid claims about absent tests based on root filenames
 or script names alone. Keep rule evaluation pure and reuse the inspected tree snapshot.
+
+Comparisons are descriptive, not policy verdicts. Preserve absent/unknown/inapplicable
+states; compare dependency declarations literally without implying resolved compatibility.
+Validate all selected repositories before content reads and reuse one discovery listing.

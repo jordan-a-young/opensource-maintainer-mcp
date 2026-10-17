@@ -23,6 +23,10 @@ pub enum Error {
     PaginationLimit,
     #[error("repository must be a simple GitHub repository name, not an owner/name or URL")]
     InvalidRepositoryName,
+    #[error("comparison requires 2–5 distinct repository names (case-insensitive)")]
+    InvalidComparison,
+    #[error("comparison exceeds 500 rows; choose repositories with smaller root manifests")]
+    ComparisonTooLarge,
     #[error(
         "repository is not a public project matching the configured owner, topic, and archive policy"
     )]

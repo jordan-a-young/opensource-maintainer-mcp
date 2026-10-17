@@ -1,4 +1,5 @@
 pub mod audit;
+pub mod compare;
 pub mod config;
 pub mod discovery;
 pub mod error;

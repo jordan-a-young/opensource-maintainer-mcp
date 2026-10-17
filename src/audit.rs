@@ -47,6 +47,7 @@ fn evaluate(inspection: Inspection) -> RepositoryAudit {
     let Inspection {
         overview,
         root_files,
+        ..
     } = inspection;
     let mut checks = Vec::new();
     for (id, names, missing, recommendation) in [
@@ -240,6 +241,7 @@ mod tests {
 
     fn audit(files: &[&str], manifest: Option<ManifestSummary>) -> RepositoryAudit {
         evaluate(Inspection {
+            dependencies: vec![],
             root_files: files.iter().map(|name| (*name).into()).collect(),
             overview: ProjectOverview {
                 project: Project {

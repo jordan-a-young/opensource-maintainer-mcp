@@ -14,7 +14,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tool = match mode.as_deref() {
         None => "get_project_overview",
         Some("audit") if repository.is_some() => "audit_repository",
-        _ => return Err("optional fourth argument must be 'audit' with a repository name".into()),
+        Some("compare") if repository.is_some() => "compare_standards",
+        _ => {
+            return Err(
+                "optional fourth argument must be 'audit' or 'compare' with repository names"
+                    .into(),
+            );
+        }
     };
     let mut command = tokio::process::Command::new(executable);
     command.arg(config);
@@ -28,10 +34,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !tools.iter().any(|t| t.name == tool) {
                 return Err(format!("{tool} not advertised").into());
             }
-            CallToolRequestParams::new(tool).with_arguments(serde_json::Map::from_iter([(
-                "repository".into(),
-                serde_json::Value::String(repository),
-            )]))
+            let (key, value) = if tool == "compare_standards" {
+                (
+                    "repositories",
+                    serde_json::Value::Array(
+                        repository
+                            .split(',')
+                            .map(|name| serde_json::Value::String(name.into()))
+                            .collect(),
+                    ),
+                )
+            } else {
+                ("repository", serde_json::Value::String(repository))
+            };
+            CallToolRequestParams::new(tool)
+                .with_arguments(serde_json::Map::from_iter([(key.into(), value)]))
         } else {
             CallToolRequestParams::new("list_projects")
         };

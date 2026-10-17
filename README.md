@@ -1,8 +1,8 @@
 # Open Source Maintainer MCP
 
 A Rust MCP server that discovers **public** GitHub repositories by owner and topic.
-Milestones 1–3 provide read-only `list_projects`, `get_project_overview`, and
-`audit_repository` tools over stdio. Owners can be
+Milestones 1–4 provide read-only `list_projects`, `get_project_overview`, and
+`audit_repository`, and `compare_standards` tools over stdio. Owners can be
 GitHub users or organizations; Availity is only the example configuration.
 
 ## Setup and run
@@ -166,6 +166,54 @@ organization-inherited policies, CI analysis, and cross-repository comparisons r
 outside scope. There is no score or repository-wide pass/fail claim. Upstream failures
 return a tool error, never a fabricated list of missing files.
 
+### Standards comparison
+
+Call `compare_standards` with `{"repositories":["element","availity-react"]}`. Supply
+2–5 distinct simple names within the configured owner/topic/archive scope. Names are
+case-insensitive for selection; duplicates, URLs, and invalid names are rejected. One
+discovery listing is reused, and the full selection is checked before any content read.
+The tool inspects repositories sequentially with the existing bounded anonymous reads.
+An upstream failure fails the comparison; no partial report is returned.
+
+The result contains `scope`, `projects` (full names and individual tree SHAs), and `rows`
+sorted by stable IDs. Each row has per-repository `observations`, ordered by full name,
+with a `status`, a string-array `values`, and observed file/field `evidence`.
+
+| Observation status | Meaning |
+| --- | --- |
+| `observed` | Value is directly available in the inspected snapshot. |
+| `absent` | The relevant manifest parsed, but this field/dependency is absent. |
+| `not_assessed` | The manifest/section is unreadable or the declaration cannot be resolved within scope. |
+| `not_applicable` | The ecosystem's root manifest is absent. |
+
+Row statuses are `same`, `different`, `incomplete`, or `not_comparable`. Unknown data
+makes a row incomplete, even when other observed values differ. Inapplicable projects
+are excluded from equality; fewer than two applicable projects makes it not comparable.
+Absent fields can compare equal to other absent fields, but differ from observed values.
+Differences are observations, not violations or instructions to standardize all projects.
+
+Compared conventions are the known root configuration filename set, npm script commands,
+npm `packageManager`, and npm/Cargo workspace flags. Filenames do not establish equivalent
+configuration behavior. Script values are untrusted data and are never executed.
+
+Dependency rows keep ecosystem, section, and dependency name distinct:
+
+- npm: `dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`.
+- Cargo: root `dependencies`, `dev-dependencies`, `build-dependencies`, and
+  `workspace.dependencies`. String declarations and table `version` fields are compared.
+- Cargo inherited/path/git-only declarations without a version stay `not_assessed`.
+- Declared strings are compared literally: `^1` and `1.0.0` differ without any claim
+  about semver compatibility or resolved installations. Cargo source/features are not compared.
+
+Dependency coverage rows explicitly flag unreadable sections even when no dependency
+names could be collected. Target-specific Cargo dependencies, lockfile resolution, nested
+packages, config contents, and CI are outside scope. Root manifest limits still apply;
+comparisons exceeding 500 rows return an error rather than truncating. Repositories have
+separate snapshots, so the group is not an atomic point-in-time view.
+
+Existing overview and audit output formats remain unchanged. Dependency declarations
+are retained internally during the same manifest reads, not fetched separately.
+
 GitHub failures return MCP tool results with `isError: true` and actionable text.
 Authentication, rate limits, HTTP failures, malformed JSON, timeouts, and connection
 failures are distinguished. Raw upstream bodies and credentials are not exposed.
@@ -204,6 +252,9 @@ Overview tests additionally cover manifest parsing, scope enforcement, snapshot 
 size limits, symlinks, truncated trees, anonymous content access, and MCP parameter validation.
 Audit tests additionally verify rule evidence/statuses, workspace uncertainty, lockfile
 consistency, unchanged overview behavior, and MCP invocation without extra HTTP requests.
+Comparison tests additionally cover scoped names, separate dependency sections, Cargo inheritance,
+unknown versus absent values, deterministic ordering, row limits, one shared listing,
+all-project scope validation, upstream failures, and MCP parameters/invocation.
 GitHub Actions runs formatting, Clippy, and tests using stable Rust and the lockfile.
 
 ### Manual live smoke test
@@ -240,6 +291,15 @@ cargo run --locked --example smoke -- target/debug/opensource-maintainer-mcp exa
 Expect an audit object with stable check IDs and the tree SHA. Findings may change with
 repository contents; this smoke test is manual and is never a CI dependency.
 
+For a live comparison, pass comma-separated names followed by `compare`:
+
+```sh
+cargo run --locked --example smoke -- target/debug/opensource-maintainer-mcp examples/config.toml element,availity-react compare
+```
+
+This manual check uses public GitHub and is never run in CI. Expect two project snapshots
+and rows containing conventions and declared dependency versions.
+
 Optional interactive inspection (requires Node/npm; not required by this project):
 
 ```sh
@@ -254,6 +314,7 @@ npx @modelcontextprotocol/inspector target/debug/opensource-maintainer-mcp examp
 - `src/discovery.rs`: transport-independent repository filtering and sorting.
 - `src/overview.rs`: bounded snapshot inspection and pure manifest parsing.
 - `src/audit.rs`: pure audit rules and the transport-independent audit service method.
+- `src/compare.rs`: dependency extraction and deterministic cross-project comparison.
 - `src/config.rs`: typed TOML parsing and validation.
 - `src/model.rs`: GitHub wire representation and stable tool output.
 - `src/error.rs`: application error enum with `thiserror`.
@@ -284,10 +345,16 @@ fetching again. `CheckStatus` forces explicit unknown/not-applicable outcomes, b
 `Option<&ManifestSummary>` lets several rules share parsed data, and `BTreeSet` compares
 package-manager families without mistaking two npm lockfiles for two different managers.
 
+Milestone 4 uses `BTreeMap`/`BTreeSet` to join projects by stable field/dependency keys
+and produce deterministic output. Owned inspections retain bounded declaration data;
+comparison helpers borrow it while building response observations. Separate enums model
+observation availability and comparison outcomes, preventing unknown data from silently
+becoming a missing dependency. The shared inspection path preserves the earlier tools.
+
 ## Roadmap
 
-Future proposals only: standards comparison, CI
+Future proposals only: CI
 analysis, release configuration review, and eventual agent-factory integration. No
-repository writes, database, or plugin framework are included in Milestones 1–3.
+repository writes, database, or plugin framework are included in Milestones 1–4.
 
 MIT licensed.
