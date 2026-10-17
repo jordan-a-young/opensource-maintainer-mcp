@@ -1,0 +1,42 @@
+name: Build release artifacts
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install stable Rust
+        run: rustup toolchain install stable --profile minimal --target "${{ matrix.target }}"
+      - name: Test on native target (mocked HTTP only)
+        run: cargo +stable test --locked --all-features --target "${{ matrix.target }}"
+      - name: Build optimized binary
+        run: cargo +stable build --locked --release --target "${{ matrix.target }}"
+      - name: Package binary and checksum
+        run: python scripts/package_release.py --target "${{ matrix.target }}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7

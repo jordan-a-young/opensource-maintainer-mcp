@@ -44,3 +44,8 @@ Release review inspects root npm metadata and static workflow indicators only. N
 npmrc/token files, execute release scripts/configuration, or publish. Keep registry URLs,
 workflow commands, and environment values out of output. A private workspace root does not
 imply its members are private. OIDC permissions never prove npm account-side trust is set up.
+
+Release infrastructure is separate from the read-only MCP server. Keep publication manual:
+version tags may prepare drafts, but workflows must not publish a release or upload to
+crates.io without explicit approval. Share artifact builds between CI and release workflows,
+pin external actions, and validate the archive layout and checksums when changing packaging.

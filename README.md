@@ -36,6 +36,35 @@ needed, supply a fine-grained token with read-only public repository metadata ac
 through your environment or client's secret mechanism. No write permissions are needed.
 The server does not read `gh` credentials automatically. Never put tokens in TOML or Git.
 
+## Installation and releases
+
+Release automation is prepared; no published release is promised yet. Until a release
+is published, build from source with `cargo build --release --locked` and use the binary
+in `target/release/` (with `.exe` on Windows).
+
+Once a release is published, download the archive matching your OS/CPU and its `.sha256`
+file from [GitHub Releases](https://github.com/jordan-a-young/opensource-maintainer-mcp/releases).
+Verify the downloaded archive before extracting:
+
+```sh
+# Linux: run in the download directory, replacing ARCHIVE with the actual filename
+sha256sum -c ARCHIVE.tar.gz.sha256
+# macOS
+shasum -a 256 -c ARCHIVE.tar.gz.sha256
+```
+
+On Windows, run `Get-FileHash .\ARCHIVE.zip -Algorithm SHA256` in PowerShell and compare
+its hash with the first field in `ARCHIVE.zip.sha256`. Extract the archive, copy
+`config.example.toml` to `config.toml`, and edit the owner/topic. Point your MCP client's
+`command` at the extracted executable and its `args` at the configuration using absolute
+paths. No Rust or Python installation is required to run a downloaded binary. The same
+stdio protocol and optional `GITHUB_TOKEN` configuration apply.
+
+Archives cover Linux x64 (glibc, built on Ubuntu 22.04), Windows x64, and macOS Intel and
+Apple Silicon. Binaries are not code-signed/notarized; checksums provide integrity checks.
+See the [release guide](docs/RELEASING.md) for the draft-first flow, platform limits,
+validation, and the separate future crates.io decision.
+
 ## MCP client configuration
 
 Build the executable, then adapt these absolute paths to your checkout:
@@ -471,8 +500,9 @@ trait abstractions are needed.
 
 ## Roadmap
 
-Future proposals only: eventual agent-factory integration. Repository CI and hardening remain
-a separate follow-up. No
-repository writes, database, or plugin framework are included in Milestones 1–6.
+Future proposals only: eventual agent-factory integration. Release preparation adds
+cross-platform CI and draft-release automation. Further repository hardening remains a
+separate follow-up. No repository writes, database, or plugin framework are included in
+the MCP tools.
 
 MIT licensed.
