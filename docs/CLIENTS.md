@@ -211,9 +211,9 @@ Ask:
 
 An empty project list is valid: check the configured owner, topic, and archived policy.
 Use discovered simple names, not URLs or `owner/name`. Other tool arguments and limits
-are in the [tool reference](../README.md#available-tools).
+are in the [tool reference](TOOLS.md).
 
 If connection fails, check the executable/config paths and the server's stderr in the
 client logs. A process waiting on stdin is normal; it expects an MCP handshake. This
-server has no HTTP/OAuth login endpoint. See [troubleshooting](../README.md#troubleshooting)
+server has no HTTP/OAuth login endpoint. See [troubleshooting](TROUBLESHOOTING.md)
 for configuration errors, rate limits, and skipped inspection results.
