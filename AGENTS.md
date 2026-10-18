@@ -3,10 +3,11 @@
 ## Scope and development entry points
 
 This is a read-only stdio MCP server for bounded static inspection of public GitHub
-repositories. Read `README.md` for setup, tool contracts, supported platforms, and
-test/check commands. Use stable Rust and the committed `Cargo.lock`; source builds
+repositories. Start with `README.md`; see `docs/SETUP.md` for setup and supported
+platforms, `docs/TOOLS.md` for tool contracts, and `docs/DEVELOPMENT.md` for test/check
+commands. Use stable Rust and the committed `Cargo.lock`; source builds
 use `cargo build --locked`. The `config.toml` workflow and sanitized example are
-documented in `README.md` and `examples/config.toml`. Do not install toolchains or
+documented in `docs/SETUP.md` and `examples/config.toml`. Do not install toolchains or
 change dependencies merely to run a check without approval.
 
 Read `docs/RELEASING.md` and `docs/NPM.md` before release or distribution work.
