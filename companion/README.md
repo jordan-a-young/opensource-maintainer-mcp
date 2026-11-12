@@ -8,13 +8,13 @@ A private, local React + TypeScript app with two workspaces:
   JSON arguments, and inspect requests, structured results, raw MCP JSON, errors,
   and timings. Session history is held only in browser memory.
 
-This app uses **Vite+ 1.3.0**, installed locally through npm. `vp dev`, `vp check`,
+This app uses **Vite+ 1.6.0**, installed locally through pnpm. `vp dev`, `vp check`,
 `vp test`, and `vp build` are the Vite+ toolchain, not standalone Vite commands.
 It is isolated from the Rust crate and the `npm/` native-server distribution.
 
 ## Setup and run
 
-Use **Node 24.18+ (24.x) and npm 11**. No global Vite+ installation is needed.
+Use **Node 26.13.1 and pnpm 12.18.0** (`.node-version` and `package.json`). No global Vite+ installation is needed. These are companion development pins, not changes to the public Node launcher support in `npm/`.
 From the repository root:
 
 ```sh
@@ -27,8 +27,8 @@ Then:
 
 ```sh
 cd companion
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
 Open **http://127.0.0.1:5173** (use this numeric address, not `localhost`). Click
@@ -67,18 +67,18 @@ cannot supply commands, environment variables, binary paths, or config paths.
 For a release build, for example (POSIX shell):
 
 ```sh
-COMPANION_BINARY=../target/release/opensource-maintainer-mcp npm run dev
+COMPANION_BINARY=../target/release/opensource-maintainer-mcp pnpm dev
 ```
 
 In PowerShell, set `$env:COMPANION_BINARY = '../target/release/opensource-maintainer-mcp.exe'`
-before `npm run dev`. Use your shell's environment or secret mechanism for tokens;
+before `pnpm dev`. Use your shell's environment or secret mechanism for tokens;
 do not use a `VITE_`-prefixed token or put credentials in frontend files.
 
 ## Offline browser smoke test
 
 ```sh
 cd companion
-npm run dev:fixture
+pnpm dev:fixture
 ```
 
 This cross-platform command starts the same Vite+ app and same SDK stdio bridge,
@@ -97,7 +97,7 @@ Rust, configuration, credentials, or GitHub access**. The UI displays
 6. Disconnect and reconnect, resize to mobile, and check keyboard navigation.
 
 For preview, set `COMPANION_FIXTURE=1` in the operator environment before
-`npm run preview`. Fixture mode is selected on server startup, never via a URL or
+`pnpm preview`. Fixture mode is selected on server startup, never via a URL or
 browser toggle. Stop the fixture server before starting the real-server mode.
 
 ## Checks and build
@@ -105,23 +105,42 @@ browser toggle. Stop the fixture server before starting the real-server mode.
 Run from `companion/`:
 
 ```sh
-npm run check        # Vite+ formatting, Oxlint, type-aware lint and TypeScript checks
-npm test             # Vite+/Vitest bridge integration and React presentation tests
-npm run build        # Vite+/Rolldown production frontend -> ignored dist/
-npm run smoke:stdio  # Real Rust initialize + tools/list; no GitHub calls
-npm run preview      # Same local bridge + built frontend, http://127.0.0.1:4173
+pnpm check        # Vite+ formatting, Oxlint, type-aware lint and TypeScript checks
+pnpm test         # Vite+/Vitest bridge integration and React presentation tests
+pnpm build        # Vite+/Rolldown production frontend -> ignored dist/
+pnpm smoke:stdio  # Real Rust initialize + tools/list; no GitHub calls
+pnpm preview      # Same local bridge + built frontend, http://127.0.0.1:4173
 ```
 
-`npm run fmt` applies formatting. The smoke command requires the debug Rust
+`pnpm fmt` applies formatting. The smoke command requires the debug Rust
 executable and always uses the sanitized `examples/config.toml`, never your config.
 The SDK may print an advisory about Rust's `uint` schema format; normal JSON Schema
 numeric constraints still apply.
 
-`npm exec -- vp toolchain` inspects the bundled tools. `npm exec -- vp run <script>`
-runs package scripts, whereas `npm exec -- vp <command>` runs built-in toolchain
-commands. The npm lockfile pins all dependencies. The `vite` override aliases
-`@voidzero-dev/vite-plus-core@1.3.0`; the `vitest` override matches the bundled
-5.0.5, confirmed with `npm exec -- vp toolchain vitest`.
+`pnpm exec vp toolchain` inspects the bundled tools. `pnpm exec vp run <script>`
+runs package scripts, whereas `pnpm exec vp <command>` runs built-in toolchain
+commands. `pnpm-lock.yaml` pins dependencies; `pnpm-workspace.yaml` is local to this
+app and does not include the Rust crate or `npm/`. Its `vite` override aliases
+`@voidzero-dev/vite-plus-core@1.6.0`; the `vitest` override matches the bundled
+5.1.0, inspectable with `pnpm exec vp toolchain vitest`. Dependency build scripts
+remain unapproved; `allowBuilds` explicitly denies the unused esbuild install script.
+Peer-version allowances are limited to the React plugin, Vitest, and its mocker:
+the core package's 1.6.0 version embeds Vite 8.3.7, satisfying their Vite 8 API needs.
+
+For an isolated checkout, use an assigned free port (POSIX shell):
+
+```sh
+pnpm dev:fixture --host 127.0.0.1 --port 5285 --strictPort
+```
+
+Or after building:
+
+```sh
+COMPANION_FIXTURE=1 pnpm preview --host 127.0.0.1 --port 4285 --strictPort
+```
+
+The bridge validates the actual listener's exact Host/Origin on either port. Never
+reuse or stop another checkout's service.
 
 ## Local bridge and limits
 
